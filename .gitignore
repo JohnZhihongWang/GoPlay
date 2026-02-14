@@ -1,0 +1,22 @@
+# Local config (copy config.example.json to config.json and edit)
+config.json
+
+# KataGo GTP logs
+gtp_logs/
+
+# Claude Code
+.claude/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# OS files
+nul
+Thumbs.db
+.DS_Store
+
+# IDE
+.vscode/
+.idea/

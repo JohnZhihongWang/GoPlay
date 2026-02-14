@@ -1,0 +1,20 @@
+{
+  "server": {
+    "host": "localhost",
+    "port": 9001
+  },
+  "engine1": {
+    "name": "KataGo",
+    "command": "path/to/katago gtp -model path/to/model.bin.gz -config path/to/config.cfg"
+  },
+  "game_defaults": {
+    "time_settings": {
+      "main_time": 0,
+      "byo_time": 5,
+      "byo_stones": 1
+    },
+    "rules": "chinese",
+    "komi": 6.5,
+    "max_visits": 200
+  }
+}

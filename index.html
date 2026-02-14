@@ -1,0 +1,3063 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Go (Weiqi / Baduk)</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #1a1a2e;
+      color: #e0e0e0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 12px;
+    }
+
+    #app {
+      max-width: 700px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    header {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 300;
+      letter-spacing: 4px;
+      color: #f0f0f0;
+    }
+
+    .size-selector {
+      display: flex;
+      gap: 6px;
+    }
+
+    .size-btn {
+      background: #16213e;
+      color: #a0a0a0;
+      border: 1px solid #0f3460;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .size-btn:hover { background: #0f3460; color: #e0e0e0; }
+    .size-btn.active { background: #e94560; color: #fff; border-color: #e94560; }
+
+    #game-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      max-width: 760px;
+      padding: 6px 0;
+    }
+
+    .player-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: 2px solid transparent;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .player-info.active {
+      border-color: #e94560;
+      background: rgba(233, 69, 96, 0.1);
+    }
+
+    .stone-icon {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+    }
+
+    .stone-icon.black { background: radial-gradient(circle at 35% 35%, #555, #000); }
+    .stone-icon.white { background: radial-gradient(circle at 35% 35%, #fff, #bbb); border: 1px solid #888; }
+
+    .player-name { font-weight: 600; font-size: 14px; }
+    .captures { font-size: 12px; color: #999; }
+
+    #turn-indicator {
+      font-size: 15px;
+      font-weight: 600;
+      color: #e94560;
+      text-align: center;
+    }
+
+    #board-container {
+      width: 100%;
+      max-width: 760px;
+      aspect-ratio: 1 / 1;
+      position: relative;
+    }
+
+    #go-board {
+      width: 100%;
+      height: 100%;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+
+    #controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .ctrl-btn {
+      background: #16213e;
+      color: #e0e0e0;
+      border: 1px solid #0f3460;
+      border-radius: 6px;
+      padding: 8px 18px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .ctrl-btn:hover:not(:disabled) { background: #0f3460; }
+    .ctrl-btn:disabled { opacity: 0.4; cursor: default; }
+    .ctrl-btn.danger { border-color: #e94560; color: #e94560; }
+    .ctrl-btn.danger:hover:not(:disabled) { background: #e94560; color: #fff; }
+
+    #status-bar {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      max-width: 760px;
+      font-size: 12px;
+      color: #777;
+    }
+
+    #status-message {
+      color: #e94560;
+      font-weight: 500;
+      transition: opacity 0.3s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .status-spinner {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border: 2px solid rgba(233, 69, 96, 0.3);
+      border-top-color: #e94560;
+      border-radius: 50%;
+      animation: status-spin 0.8s linear infinite;
+    }
+
+    @keyframes status-spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Score overlay */
+    #score-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      backdrop-filter: blur(4px);
+    }
+
+    #score-overlay.hidden { display: none; }
+
+    .score-card {
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 12px;
+      padding: 30px 40px;
+      text-align: center;
+      min-width: 300px;
+    }
+
+    .score-card h2 {
+      font-size: 22px;
+      margin-bottom: 20px;
+      color: #e94560;
+    }
+
+    .score-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+
+    .score-table th {
+      padding: 6px 12px;
+      border-bottom: 1px solid #0f3460;
+      color: #999;
+      font-weight: 400;
+    }
+
+    .score-table td {
+      padding: 6px 12px;
+      text-align: center;
+    }
+
+    .score-table .winner-row td { color: #e94560; font-weight: 700; }
+
+    .score-winner {
+      font-size: 18px;
+      margin-bottom: 18px;
+      font-weight: 600;
+    }
+
+    /* Mode selector */
+    .mode-selector {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .mode-btn {
+      background: #16213e;
+      color: #a0a0a0;
+      border: 1px solid #0f3460;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .mode-btn:hover { background: #0f3460; color: #e0e0e0; }
+    .mode-btn.active { background: #e94560; color: #fff; border-color: #e94560; }
+
+    /* AI settings */
+    .ai-settings {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+    }
+
+    .ai-settings label { color: #999; }
+
+    .ai-settings select {
+      background: #16213e;
+      color: #e0e0e0;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 13px;
+    }
+
+    .ai-speed-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Connection indicator */
+    .conn-status {
+      font-size: 12px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .conn-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .conn-status.connected .conn-dot { background: #4caf50; }
+    .conn-status.connected { color: #4caf50; }
+    .conn-status.disconnected .conn-dot { background: #777; }
+    .conn-status.disconnected { color: #777; }
+    .conn-status.connecting .conn-dot { background: #ff9800; }
+    .conn-status.connecting { color: #ff9800; }
+
+    /* AI thinking indicator — inline below turn text */
+    .ai-thinking {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin-top: 2px;
+      color: #e0e0e0;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .ai-thinking.hidden { display: none; }
+
+    .ai-spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255,255,255,0.25);
+      border-top-color: #e94560;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Analysis panel */
+    .analysis-panel {
+      width: 100%;
+      max-width: 760px;
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 8px;
+      padding: 12px;
+      display: none;
+    }
+
+    .analysis-panel.visible { display: block; }
+
+    .analysis-nav {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .analysis-nav .ctrl-btn { padding: 4px 10px; font-size: 12px; }
+
+    .analysis-move-num {
+      font-size: 13px;
+      color: #e0e0e0;
+      min-width: 80px;
+      text-align: center;
+    }
+
+    .analysis-slider {
+      flex: 1;
+      accent-color: #e94560;
+    }
+
+    .analysis-results {
+      font-size: 13px;
+    }
+
+    .analysis-results table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .analysis-results th {
+      text-align: left;
+      padding: 4px 8px;
+      color: #999;
+      font-weight: 400;
+      border-bottom: 1px solid #0f3460;
+      font-size: 12px;
+    }
+
+    .analysis-results td {
+      padding: 4px 8px;
+      font-size: 12px;
+    }
+
+    .analysis-results tr:hover { background: rgba(233, 69, 96, 0.1); cursor: pointer; }
+
+    .analysis-results .top-move td { color: #4caf50; font-weight: 600; }
+    .analysis-results .selected-move td { background: rgba(233, 69, 96, 0.2); }
+
+    .analysis-winrate {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .winrate-bar {
+      flex: 1;
+      height: 20px;
+      background: #fff;
+      border-radius: 10px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .winrate-fill {
+      height: 100%;
+      background: #333;
+      border-radius: 10px 0 0 10px;
+      transition: width 0.3s;
+    }
+
+    .winrate-label {
+      font-size: 11px;
+      min-width: 40px;
+      text-align: center;
+    }
+
+    .analysis-pv {
+      margin-top: 6px;
+      padding: 8px;
+      background: rgba(15, 52, 96, 0.5);
+      border-radius: 4px;
+      font-size: 12px;
+      color: #ccc;
+    }
+
+    .analysis-pv .pv-title {
+      color: #e94560;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .analysis-pv .pv-sequence {
+      font-family: 'Consolas', 'Courier New', monospace;
+      color: #e0e0e0;
+      word-break: break-all;
+    }
+
+    .analysis-score-diff {
+      font-size: 12px;
+      color: #999;
+      margin-top: 6px;
+    }
+
+    /* Engine selection for AI vs AI */
+    .engine-select-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      font-size: 13px;
+      flex-wrap: wrap;
+    }
+
+    .engine-select-row label { color: #999; }
+
+    .engine-select-row select {
+      background: #16213e;
+      color: #e0e0e0;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 12px;
+      max-width: 200px;
+    }
+
+    .start-ai-btn {
+      background: #4caf50;
+      color: #fff;
+      border: 1px solid #4caf50;
+      border-radius: 6px;
+      padding: 6px 16px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .start-ai-btn:hover { background: #45a049; }
+
+    .stop-ai-btn {
+      background: #e94560;
+      color: #fff;
+      border: 1px solid #e94560;
+      border-radius: 6px;
+      padding: 6px 16px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .stop-ai-btn:hover { background: #d63851; }
+
+    @media (max-width: 500px) {
+      h1 { font-size: 22px; }
+      .player-name { font-size: 12px; }
+      .ctrl-btn { padding: 6px 12px; font-size: 13px; }
+      .score-card { padding: 20px; min-width: unset; width: 90vw; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>GO</h1>
+      <div class="size-selector">
+        <button class="size-btn" data-size="9">9&times;9</button>
+        <button class="size-btn" data-size="13">13&times;13</button>
+        <button class="size-btn active" data-size="19">19&times;19</button>
+      </div>
+      <div class="mode-selector">
+        <button class="mode-btn active" data-mode="hvh">Human vs Human</button>
+        <button class="mode-btn" data-mode="hvai-b">Play as Black</button>
+        <button class="mode-btn" data-mode="hvai-w">Play as White</button>
+        <button class="mode-btn" data-mode="aivai">AI vs AI</button>
+      </div>
+      <div class="ai-settings" id="ai-settings" style="display:none;">
+        <label>AI Strength:</label>
+        <select id="ai-difficulty">
+          <option value="1">Beginner</option>
+          <option value="10">Easy</option>
+          <option value="50">Medium</option>
+          <option value="200" selected>Hard</option>
+          <option value="1000">Strong</option>
+          <option value="10000">Maximum</option>
+        </select>
+        <span class="ai-speed-control" id="ai-speed-control" style="display:none;">
+          <label>Delay:</label>
+          <select id="ai-speed">
+            <option value="0">No delay</option>
+            <option value="500">0.5s</option>
+            <option value="1000" selected>1s</option>
+            <option value="2000">2s</option>
+            <option value="3000">3s</option>
+          </select>
+        </span>
+        <span class="conn-status disconnected" id="conn-status">
+          <span class="conn-dot"></span>
+          <span class="conn-text">Disconnected</span>
+        </span>
+      </div>
+      <div class="engine-select-row" id="hvai-engine-row" style="display:none;">
+        <label>AI Engine:</label>
+        <select id="hvai-engine-select">
+          <option value="1">Engine 1 (connecting...)</option>
+        </select>
+      </div>
+      <div class="engine-select-row" id="engine-select-row" style="display:none;">
+        <label>Black Engine:</label>
+        <select id="engine-black-select">
+          <option value="1">Engine 1 (connecting...)</option>
+        </select>
+        <label>White Engine:</label>
+        <select id="engine-white-select">
+          <option value="1">Engine 1 (connecting...)</option>
+        </select>
+        <button class="start-ai-btn" id="start-aivai-btn">&#9654; Start</button>
+        <button class="stop-ai-btn" id="stop-aivai-btn" style="display:none;">&#9632; Stop</button>
+      </div>
+    </header>
+
+    <div id="game-info">
+      <div class="player-info active" id="black-info">
+        <div class="stone-icon black"></div>
+        <span class="player-name">Black</span>
+        <span class="captures">Cap: 0</span>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;min-width:110px;">
+        <div id="turn-indicator">Black's Turn</div>
+        <div id="ai-thinking" class="ai-thinking hidden">
+          <div class="ai-spinner"></div>
+          <span id="ai-thinking-label">Thinking…</span>
+        </div>
+      </div>
+      <div class="player-info" id="white-info">
+        <div class="stone-icon white"></div>
+        <span class="player-name">White</span>
+        <span class="captures">Cap: 0</span>
+      </div>
+    </div>
+
+    <div id="board-container">
+      <canvas id="go-board"></canvas>
+    </div>
+
+    <div id="controls">
+      <button class="ctrl-btn" id="pass-btn">Pass</button>
+      <button class="ctrl-btn danger" id="resign-btn">Resign</button>
+      <button class="ctrl-btn" id="undo-btn" disabled>Undo</button>
+      <button class="ctrl-btn" id="new-game-btn">New Game</button>
+      <button class="ctrl-btn" id="save-sgf-btn">Save SGF</button>
+      <button class="ctrl-btn" id="load-sgf-btn">Load SGF</button>
+      <input type="file" id="sgf-file-input" accept=".sgf" style="display:none;">
+    </div>
+
+    <div id="analysis-panel" class="analysis-panel">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap;">
+        <label style="font-size:12px;color:#ccc;">Engine:</label>
+        <select id="analysis-engine-select" style="font-size:12px;padding:2px 4px;background:#333;color:#eee;border:1px solid #555;border-radius:3px;">
+          <option value="1">Engine 1</option>
+        </select>
+        <span style="margin-left:8px;font-size:12px;color:#ccc;">Show:</span>
+        <div id="analysis-display-toggle" style="display:inline-flex;border:1px solid #555;border-radius:3px;overflow:hidden;font-size:11px;">
+          <button id="show-winrate-btn" class="toggle-btn active" style="padding:2px 8px;background:#4caf50;color:#fff;border:none;cursor:pointer;">Win%</button>
+          <button id="show-score-btn" class="toggle-btn" style="padding:2px 8px;background:#333;color:#ccc;border:none;border-left:1px solid #555;cursor:pointer;">Score</button>
+        </div>
+        <button id="show-territory-btn" style="margin-left:8px;padding:4px 14px;background:#333;color:#ccc;border:1px solid #555;border-radius:3px;cursor:pointer;font-size:14px;" title="Toggle dead stones &amp; territory">Area</button>
+        <button id="analyze-btn" style="margin-left:8px;padding:4px 14px;background:#4caf50;color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:14px;" title="Run full analysis">Analyze</button>
+        <button id="deeper-analysis-btn" style="margin-left:4px;padding:4px 14px;background:#1976d2;color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:14px;" title="Deeper analysis (F5)">Deeper</button>
+      </div>
+      <div class="analysis-nav">
+        <button class="ctrl-btn" id="analysis-start">&laquo;</button>
+        <button class="ctrl-btn" id="analysis-prev">&lsaquo;</button>
+        <span class="analysis-move-num" id="analysis-move-num">Move 0</span>
+        <button class="ctrl-btn" id="analysis-next">&rsaquo;</button>
+        <button class="ctrl-btn" id="analysis-end">&raquo;</button>
+        <input type="range" id="analysis-slider" class="analysis-slider" min="0" max="0" value="0">
+      </div>
+      <div class="analysis-winrate" id="analysis-winrate" style="display:none;">
+        <span class="winrate-label" id="winrate-black">B: 50%</span>
+        <div class="winrate-bar">
+          <div class="winrate-fill" id="winrate-fill" style="width:50%"></div>
+        </div>
+        <span class="winrate-label" id="winrate-white">W: 50%</span>
+      </div>
+      <div class="analysis-score-diff" id="analysis-score-diff"></div>
+      <div class="analysis-results" id="analysis-results"></div>
+      <div class="analysis-pv" id="analysis-pv" style="display:none;">
+        <div class="pv-title">Best Continuation:</div>
+        <div class="pv-sequence" id="pv-sequence"></div>
+      </div>
+    </div>
+
+    <div id="status-bar">
+      <span id="status-message"></span>
+    </div>
+
+    <div id="score-overlay" class="hidden">
+      <div class="score-card">
+        <h2 id="score-title">Game Over</h2>
+        <div id="score-details"></div>
+        <button class="ctrl-btn" id="close-score-btn">New Game</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    'use strict';
+
+    // ==================== Constants ====================
+    const EMPTY = 0, BLACK = 1, WHITE = 2;
+
+    const STAR_POINTS = {
+      9:  [[2,2],[2,6],[4,4],[6,2],[6,6]],
+      13: [[3,3],[3,6],[3,9],[6,3],[6,6],[6,9],[9,3],[9,6],[9,9]],
+      19: [[3,3],[3,9],[3,15],[9,3],[9,9],[9,15],[15,3],[15,9],[15,15]]
+    };
+
+    const KOMI = { 9: 5.5, 13: 5.5, 19: 6.5 };
+
+    // Column labels: A-T skipping I (standard Go notation)
+    const COL_LABELS = 'ABCDEFGHJKLMNOPQRST';
+
+    // ==================== GoGame (Model) ====================
+    class GoGame {
+      constructor(size) {
+        this.size = size;
+        this.komi = KOMI[size] || 6.5;
+        this.reset();
+      }
+
+      reset() {
+        this.board = Array.from({ length: this.size }, () => new Array(this.size).fill(EMPTY));
+        this.currentPlayer = BLACK;
+        this.captures = { [BLACK]: 0, [WHITE]: 0 };
+        this.koPoint = null;
+        this.moveHistory = [];
+        this.consecutivePasses = 0;
+        this.gameOver = false;
+        this.winner = null;
+        this.lastMove = null;
+      }
+
+      getNeighbors(row, col) {
+        const n = [];
+        if (row > 0) n.push([row - 1, col]);
+        if (row < this.size - 1) n.push([row + 1, col]);
+        if (col > 0) n.push([row, col - 1]);
+        if (col < this.size - 1) n.push([row, col + 1]);
+        return n;
+      }
+
+      // BFS flood fill: find connected group and its liberties
+      getGroup(row, col) {
+        const color = this.board[row][col];
+        if (color === EMPTY) return null;
+
+        const visited = new Set();
+        const stones = [];
+        const liberties = new Set();
+        const queue = [[row, col]];
+        visited.add(row * this.size + col);
+
+        while (queue.length > 0) {
+          const [r, c] = queue.shift();
+          stones.push([r, c]);
+
+          for (const [nr, nc] of this.getNeighbors(r, c)) {
+            const key = nr * this.size + nc;
+            if (visited.has(key)) continue;
+            visited.add(key);
+
+            if (this.board[nr][nc] === color) {
+              queue.push([nr, nc]);
+            } else if (this.board[nr][nc] === EMPTY) {
+              liberties.add(key);
+            }
+          }
+        }
+
+        return { stones, liberties: liberties.size };
+      }
+
+      playMove(row, col) {
+        if (this.gameOver) return { valid: false, reason: 'Game is over' };
+        if (row < 0 || row >= this.size || col < 0 || col >= this.size)
+          return { valid: false, reason: 'Out of bounds' };
+        if (this.board[row][col] !== EMPTY)
+          return { valid: false, reason: 'Occupied' };
+        if (this.koPoint && this.koPoint[0] === row && this.koPoint[1] === col)
+          return { valid: false, reason: 'Ko violation' };
+
+        // Save state for rollback
+        const savedBoard = this.board.map(r => [...r]);
+        const savedCaptures = { ...this.captures };
+        const savedKo = this.koPoint;
+
+        // Place stone
+        this.board[row][col] = this.currentPlayer;
+        const opponent = this.currentPlayer === BLACK ? WHITE : BLACK;
+
+        // Capture opponent groups with 0 liberties adjacent to placed stone
+        let totalCaptured = [];
+        const checkedGroups = new Set();
+        for (const [nr, nc] of this.getNeighbors(row, col)) {
+          if (this.board[nr][nc] !== opponent) continue;
+          const groupKey = nr * this.size + nc;
+          // Avoid re-checking a group we already processed
+          // (multiple neighbors can be in the same group)
+          const group = this.getGroup(nr, nc);
+          if (group && group.liberties === 0) {
+            for (const [sr, sc] of group.stones) {
+              const sk = sr * this.size + sc;
+              if (!checkedGroups.has(sk)) {
+                checkedGroups.add(sk);
+                totalCaptured.push([sr, sc]);
+              }
+            }
+          }
+        }
+
+        // Remove captured stones
+        for (const [sr, sc] of totalCaptured) {
+          this.board[sr][sc] = EMPTY;
+        }
+
+        // Suicide check: if placed stone's group has 0 liberties, roll back
+        const selfGroup = this.getGroup(row, col);
+        if (selfGroup.liberties === 0) {
+          this.board = savedBoard;
+          this.captures = savedCaptures;
+          this.koPoint = savedKo;
+          return { valid: false, reason: 'Suicide is not allowed' };
+        }
+
+        // Update captures
+        this.captures[this.currentPlayer] += totalCaptured.length;
+
+        // Ko detection: exactly 1 captured, capturing stone has exactly 1 liberty
+        if (totalCaptured.length === 1 && selfGroup.liberties === 1) {
+          this.koPoint = [totalCaptured[0][0], totalCaptured[0][1]];
+        } else {
+          this.koPoint = null;
+        }
+
+        // Save to history
+        this.moveHistory.push({
+          type: 'move',
+          row, col,
+          player: this.currentPlayer,
+          capturedStones: totalCaptured,
+          previousBoard: savedBoard,
+          previousCaptures: savedCaptures,
+          previousKo: savedKo,
+          previousLastMove: this.lastMove,
+          previousPasses: this.consecutivePasses,
+        });
+
+        this.lastMove = [row, col];
+        this.consecutivePasses = 0;
+        this.currentPlayer = opponent;
+
+        return { valid: true, captures: totalCaptured.length };
+      }
+
+      pass() {
+        if (this.gameOver) return;
+        const savedKo = this.koPoint;
+        this.moveHistory.push({
+          type: 'pass',
+          player: this.currentPlayer,
+          previousKo: savedKo,
+          previousLastMove: this.lastMove,
+          previousPasses: this.consecutivePasses,
+        });
+        this.koPoint = null;
+        this.lastMove = null;
+        this.consecutivePasses++;
+        this.currentPlayer = this.currentPlayer === BLACK ? WHITE : BLACK;
+
+        if (this.consecutivePasses >= 2) {
+          this.endGame();
+        }
+      }
+
+      resign() {
+        if (this.gameOver) return;
+        this.gameOver = true;
+        this.winner = this.currentPlayer === BLACK ? WHITE : BLACK;
+      }
+
+      undo() {
+        if (this.moveHistory.length === 0) return false;
+        const entry = this.moveHistory.pop();
+
+        if (entry.type === 'pass') {
+          this.koPoint = entry.previousKo;
+          this.lastMove = entry.previousLastMove;
+          this.consecutivePasses = entry.previousPasses;
+          this.currentPlayer = entry.player;
+          this.gameOver = false;
+          this.winner = null;
+          return true;
+        }
+
+        // Restore full board state
+        this.board = entry.previousBoard;
+        this.captures = entry.previousCaptures;
+        this.koPoint = entry.previousKo;
+        this.lastMove = entry.previousLastMove;
+        this.consecutivePasses = entry.previousPasses;
+        this.currentPlayer = entry.player;
+        this.gameOver = false;
+        this.winner = null;
+        return true;
+      }
+
+      endGame() {
+        this.gameOver = true;
+        const score = this.calculateScore();
+        if (score.black.total > score.white.total) this.winner = BLACK;
+        else if (score.white.total > score.black.total) this.winner = WHITE;
+        else this.winner = null; // tie
+      }
+
+      calculateScore() {
+        const visited = Array.from({ length: this.size }, () => new Array(this.size).fill(false));
+        let blackTerritory = 0, whiteTerritory = 0;
+        let blackStones = 0, whiteStones = 0;
+        const territoryMap = Array.from({ length: this.size }, () => new Array(this.size).fill(EMPTY));
+
+        for (let r = 0; r < this.size; r++) {
+          for (let c = 0; c < this.size; c++) {
+            if (this.board[r][c] === BLACK) blackStones++;
+            else if (this.board[r][c] === WHITE) whiteStones++;
+          }
+        }
+
+        for (let r = 0; r < this.size; r++) {
+          for (let c = 0; c < this.size; c++) {
+            if (this.board[r][c] !== EMPTY || visited[r][c]) continue;
+
+            const region = [];
+            const queue = [[r, c]];
+            visited[r][c] = true;
+            let bordersBlack = false, bordersWhite = false;
+
+            while (queue.length > 0) {
+              const [cr, cc] = queue.shift();
+              region.push([cr, cc]);
+
+              for (const [nr, nc] of this.getNeighbors(cr, cc)) {
+                if (this.board[nr][nc] === EMPTY && !visited[nr][nc]) {
+                  visited[nr][nc] = true;
+                  queue.push([nr, nc]);
+                } else if (this.board[nr][nc] === BLACK) {
+                  bordersBlack = true;
+                } else if (this.board[nr][nc] === WHITE) {
+                  bordersWhite = true;
+                }
+              }
+            }
+
+            let owner = EMPTY;
+            if (bordersBlack && !bordersWhite) { blackTerritory += region.length; owner = BLACK; }
+            else if (bordersWhite && !bordersBlack) { whiteTerritory += region.length; owner = WHITE; }
+
+            for (const [pr, pc] of region) {
+              territoryMap[pr][pc] = owner;
+            }
+          }
+        }
+
+        const blackTotal = blackStones + blackTerritory;
+        const whiteTotal = whiteStones + whiteTerritory + this.komi;
+
+        return {
+          black: { stones: blackStones, territory: blackTerritory, total: blackTotal },
+          white: { stones: whiteStones, territory: whiteTerritory, komi: this.komi, total: whiteTotal },
+          territoryMap,
+        };
+      }
+    }
+
+    // ==================== SGF Export ====================
+    function generateSGF(game, metadata) {
+      const SGF_COLS = 'abcdefghijklmnopqrs';
+
+      function coordToSGF(row, col) {
+        return SGF_COLS[col] + SGF_COLS[row];
+      }
+
+      // Header
+      const now = new Date();
+      const dateStr = now.toISOString().slice(0, 10);
+      let sgf = '(;GM[1]FF[4]CA[UTF-8]AP[GoPlay:1.0]';
+      sgf += `SZ[${game.size}]`;
+      sgf += `KM[${game.komi}]`;
+      sgf += `RU[Chinese]`;
+      sgf += `DT[${dateStr}]`;
+
+      // Player info
+      if (metadata) {
+        if (metadata.blackPlayer) sgf += `PB[${metadata.blackPlayer}]`;
+        if (metadata.whitePlayer) sgf += `PW[${metadata.whitePlayer}]`;
+        if (metadata.blackRank) sgf += `BR[${metadata.blackRank}]`;
+        if (metadata.whiteRank) sgf += `WR[${metadata.whiteRank}]`;
+      }
+
+      // Result
+      if (game.gameOver) {
+        if (game.winner && game.consecutivePasses < 2) {
+          const w = game.winner === BLACK ? 'B' : 'W';
+          sgf += `RE[${w}+Resign]`;
+        } else if (game.winner) {
+          const score = game.calculateScore();
+          const margin = Math.abs(score.black.total - score.white.total);
+          const w = game.winner === BLACK ? 'B' : 'W';
+          sgf += `RE[${w}+${margin}]`;
+        } else {
+          sgf += `RE[0]`; // Tie
+        }
+      }
+
+      sgf += '\n';
+
+      // Moves
+      for (const entry of game.moveHistory) {
+        if (entry.type === 'move') {
+          const color = entry.player === BLACK ? 'B' : 'W';
+          const coord = coordToSGF(entry.row, entry.col);
+          sgf += `;${color}[${coord}]\n`;
+        } else if (entry.type === 'pass') {
+          const color = entry.player === BLACK ? 'B' : 'W';
+          sgf += `;${color}[]\n`;
+        }
+      }
+
+      sgf += ')';
+      return sgf;
+    }
+
+    function downloadSGF(sgfContent, filename) {
+      const blob = new Blob([sgfContent], { type: 'application/x-go-sgf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename || 'game.sgf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    // ==================== SGF Parser ====================
+    function parseSGF(sgfText) {
+      const SGF_COLS = 'abcdefghijklmnopqrs';
+      try {
+        // Extract properties from the root node
+        let size = 19, komi = 6.5;
+        const sizeMatch = sgfText.match(/SZ\[(\d+)\]/);
+        if (sizeMatch) size = parseInt(sizeMatch[1]);
+        const komiMatch = sgfText.match(/KM\[([\d.+-]+)\]/);
+        if (komiMatch) komi = parseFloat(komiMatch[1]);
+
+        // Extract moves: ;B[xx] or ;W[xx] or ;B[] (pass) or ;W[] (pass)
+        const moves = [];
+        const moveRegex = /;([BW])\[([a-s]{0,2})\]/g;
+        let match;
+        while ((match = moveRegex.exec(sgfText)) !== null) {
+          const color = match[1];
+          const coord = match[2];
+          if (coord.length === 0 || coord === '') {
+            moves.push({ type: 'pass', color });
+          } else if (coord.length === 2) {
+            const col = SGF_COLS.indexOf(coord[0]);
+            const row = SGF_COLS.indexOf(coord[1]);
+            if (col >= 0 && row >= 0 && col < size && row < size) {
+              moves.push({ type: 'move', color, row, col });
+            }
+          }
+        }
+
+        // Extract metadata
+        const pbMatch = sgfText.match(/PB\[([^\]]*)\]/);
+        const pwMatch = sgfText.match(/PW\[([^\]]*)\]/);
+        const reMatch = sgfText.match(/RE\[([^\]]*)\]/);
+        const dtMatch = sgfText.match(/DT\[([^\]]*)\]/);
+
+        return {
+          size,
+          komi,
+          moves,
+          blackPlayer: pbMatch ? pbMatch[1] : '',
+          whitePlayer: pwMatch ? pwMatch[1] : '',
+          result: reMatch ? reMatch[1] : '',
+          date: dtMatch ? dtMatch[1] : '',
+        };
+      } catch (e) {
+        console.error('SGF parse error:', e);
+        return null;
+      }
+    }
+
+    // ==================== GoRenderer (View) ====================
+    class GoRenderer {
+      constructor(canvas) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.game = null;
+        this.padding = 0;
+        this.cellSize = 0;
+        this.stoneRadius = 0;
+      }
+
+      setGame(game) {
+        this.game = game;
+        this.resize();
+      }
+
+      resize() {
+        if (!this.game) return;
+        const container = this.canvas.parentElement;
+        const rect = container.getBoundingClientRect();
+        const cssSize = Math.min(rect.width, rect.height);
+        const dpr = window.devicePixelRatio || 1;
+        const pixelSize = Math.round(cssSize * dpr);
+
+        this.canvas.width = pixelSize;
+        this.canvas.height = pixelSize;
+        this.canvas.style.width = cssSize + 'px';
+        this.canvas.style.height = cssSize + 'px';
+
+        // Padding must fit coordinate labels with comfortable spacing.
+        // On smaller boards (9×9, 13×13) cells are larger so labels need
+        // more room. We use a factor (k × cellSize) where cellSize depends
+        // on padding, solving:  p = k·(pixelSize - 2p)/(size-1)
+        //   => p = k·pixelSize / (size - 1 + 2k)
+        const k = 1.05;   // generous clearance for labels
+        const labelPad = (k * pixelSize) / (this.game.size - 1 + 2 * k);
+        this.padding = labelPad;
+        this.cellSize = (pixelSize - 2 * this.padding) / (this.game.size - 1);
+        this.stoneRadius = this.cellSize * 0.46;
+      }
+
+      boardToPixel(row, col) {
+        return {
+          x: this.padding + col * this.cellSize,
+          y: this.padding + row * this.cellSize,
+        };
+      }
+
+      pixelToBoard(canvasX, canvasY) {
+        const col = Math.round((canvasX - this.padding) / this.cellSize);
+        const row = Math.round((canvasY - this.padding) / this.cellSize);
+        if (row < 0 || row >= this.game.size || col < 0 || col >= this.game.size) return null;
+
+        // Check if click is close enough to an intersection
+        const { x, y } = this.boardToPixel(row, col);
+        const dist = Math.sqrt((canvasX - x) ** 2 + (canvasY - y) ** 2);
+        if (dist > this.cellSize * 0.48) return null;
+
+        return { row, col };
+      }
+
+      draw(hoverPos, showTerritory) {
+        const ctx = this.ctx;
+        const game = this.game;
+        const size = game.size;
+
+        // Background
+        ctx.fillStyle = '#DCB35C';
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Subtle wood grain effect
+        ctx.strokeStyle = 'rgba(160, 120, 50, 0.15)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i < this.canvas.height; i += 6) {
+          ctx.beginPath();
+          ctx.moveTo(0, i);
+          ctx.lineTo(this.canvas.width, i);
+          ctx.stroke();
+        }
+
+        // Grid lines
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = Math.max(1, this.cellSize * 0.025);
+        for (let i = 0; i < size; i++) {
+          const a = this.boardToPixel(i, 0);
+          const b = this.boardToPixel(i, size - 1);
+          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+          const c = this.boardToPixel(0, i);
+          const d = this.boardToPixel(size - 1, i);
+          ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(d.x, d.y); ctx.stroke();
+        }
+
+        // Star points
+        const stars = STAR_POINTS[size] || [];
+        ctx.fillStyle = '#333';
+        for (const [r, c] of stars) {
+          const { x, y } = this.boardToPixel(r, c);
+          ctx.beginPath();
+          ctx.arc(x, y, this.cellSize * 0.12, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Coordinate labels
+        ctx.fillStyle = '#7a6530';
+        const fontSize = Math.max(9, this.cellSize * 0.32);
+        ctx.font = `${fontSize}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (let i = 0; i < size; i++) {
+          // Column labels (top and bottom)
+          const label = COL_LABELS[i];
+          const topPos = this.boardToPixel(-0.65, i);
+          const botPos = this.boardToPixel(size - 1 + 0.65, i);
+          ctx.fillText(label, topPos.x, topPos.y);
+          ctx.fillText(label, botPos.x, botPos.y);
+
+          // Row labels (left and right) — Go convention: numbered from bottom
+          const rowLabel = String(size - i);
+          const leftPos = this.boardToPixel(i, -0.65);
+          const rightPos = this.boardToPixel(i, size - 1 + 0.65);
+          ctx.fillText(rowLabel, leftPos.x, leftPos.y);
+          ctx.fillText(rowLabel, rightPos.x, rightPos.y);
+        }
+
+        // Territory overlay (during scoring)
+        if (showTerritory) {
+          const score = game.calculateScore();
+          for (let r = 0; r < size; r++) {
+            for (let c = 0; c < size; c++) {
+              const owner = score.territoryMap[r][c];
+              if (owner === EMPTY) continue;
+              const { x, y } = this.boardToPixel(r, c);
+              const hs = this.cellSize * 0.3;
+              ctx.fillStyle = owner === BLACK ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.4)';
+              ctx.fillRect(x - hs, y - hs, hs * 2, hs * 2);
+            }
+          }
+        }
+
+        // Stones
+        for (let r = 0; r < size; r++) {
+          for (let c = 0; c < size; c++) {
+            if (game.board[r][c] !== EMPTY) {
+              this.drawStone(r, c, game.board[r][c]);
+            }
+          }
+        }
+
+        // Last move marker
+        if (game.lastMove) {
+          this.drawMarker(game.lastMove[0], game.lastMove[1]);
+        }
+
+        // Ghost stone on hover
+        if (hoverPos && !game.gameOver && game.board[hoverPos.row][hoverPos.col] === EMPTY) {
+          this.drawGhost(hoverPos.row, hoverPos.col, game.currentPlayer);
+        }
+      }
+
+      drawStone(row, col, color) {
+        const { x, y } = this.boardToPixel(row, col);
+        const r = this.stoneRadius;
+        const ctx = this.ctx;
+
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+
+        if (color === BLACK) {
+          const grad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.05, x, y, r);
+          grad.addColorStop(0, '#555');
+          grad.addColorStop(1, '#111');
+          ctx.fillStyle = grad;
+        } else {
+          const grad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.05, x, y, r);
+          grad.addColorStop(0, '#fff');
+          grad.addColorStop(1, '#c8c8c8');
+          ctx.fillStyle = grad;
+        }
+
+        ctx.fill();
+        ctx.strokeStyle = color === BLACK ? '#000' : '#999';
+        ctx.lineWidth = Math.max(0.5, this.cellSize * 0.02);
+        ctx.stroke();
+      }
+
+      drawMarker(row, col) {
+        const { x, y } = this.boardToPixel(row, col);
+        const color = this.game.board[row][col];
+        const ctx = this.ctx;
+        ctx.beginPath();
+        ctx.arc(x, y, this.stoneRadius * 0.28, 0, Math.PI * 2);
+        ctx.fillStyle = color === BLACK ? '#ddd' : '#333';
+        ctx.fill();
+      }
+
+      drawGhost(row, col, player) {
+        const { x, y } = this.boardToPixel(row, col);
+        const ctx = this.ctx;
+        ctx.beginPath();
+        ctx.arc(x, y, this.stoneRadius, 0, Math.PI * 2);
+        ctx.fillStyle = player === BLACK ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.45)';
+        ctx.fill();
+      }
+
+      drawOwnershipOverlay(ownership, game) {
+        if (!ownership || !game) return;
+        const ctx = this.ctx;
+        const size = game.size;
+        const hs = this.cellSize * 0.5; // half cell — fills seamlessly
+        // ownership values: positive = current player's territory
+        // Normalize so negative = black, positive = white
+        const flip = 1; // ownership: negative=black, positive=white directly
+
+        // First pass: render territory onto offscreen canvas, then blur onto main
+        const w = ctx.canvas.width;
+        const h = ctx.canvas.height;
+        const offscreen = document.createElement('canvas');
+        offscreen.width = w;
+        offscreen.height = h;
+        const oCtx = offscreen.getContext('2d');
+
+        // Draw solid cells on offscreen canvas
+        // After flip: negative = black territory, positive = white territory
+        for (let r = 0; r < size; r++) {
+          for (let c = 0; c < size; c++) {
+            const raw = ownership[r][c];
+            const val = raw * flip; // normalized: negative=black, positive=white
+            if (game.board[r][c] !== EMPTY) continue;
+            if (Math.abs(val) <= 0.3) continue;
+            const { x, y } = this.boardToPixel(r, c);
+            const alpha = (Math.abs(val) - 0.3) * 1.0;
+            oCtx.fillStyle = val < 0
+              ? `rgba(0,0,0,${alpha.toFixed(3)})`         // black territory = black
+              : `rgba(255,255,255,${alpha.toFixed(3)})`;   // white territory = white
+            oCtx.fillRect(x - hs, y - hs, hs * 2, hs * 2);
+          }
+        }
+
+        // Draw blurred offscreen canvas onto main canvas for soft edges
+        ctx.save();
+        ctx.filter = `blur(${Math.round(this.cellSize * 0.3)}px)`;
+        ctx.drawImage(offscreen, 0, 0);
+        ctx.restore();
+
+        // Second pass: dead stone markers
+        for (let r = 0; r < size; r++) {
+          for (let c = 0; c < size; c++) {
+            const val = ownership[r][c] * flip; // normalized: neg=black, pos=white
+            const stone = game.board[r][c];
+            if (stone === EMPTY) continue;
+            const isBlack = (stone === BLACK);
+            const ownerIsBlack = (val < -0.3);
+            const ownerIsWhite = (val > 0.3);
+            if ((isBlack && ownerIsWhite) || (!isBlack && ownerIsBlack)) {
+              const { x, y } = this.boardToPixel(r, c);
+              const s = this.stoneRadius * 0.35;
+              ctx.fillStyle = isBlack ? '#fff' : '#000';
+              ctx.fillRect(x - s, y - s, s * 2, s * 2);
+            }
+          }
+        }
+      }
+
+      drawAnalysisOverlay(moves, selectedPVIndex, hoveredCandidateIndex, displayMode, pvAnimCount) {
+        if (!moves || moves.length === 0) return;
+        const ctx = this.ctx;
+        const mode = displayMode || 'winrate';
+        const colors = [
+          '#4caf50', '#8bc34a', '#cddc39', '#ffeb3b', '#ffc107',
+          '#ff9800', '#ff5722', '#f44336', '#e91e63', '#9c27b0'
+        ];
+
+        const showPVForIndex = hoveredCandidateIndex !== null && hoveredCandidateIndex !== undefined
+          ? hoveredCandidateIndex : selectedPVIndex;
+
+        // Collect PV positions for the hovered/selected move (to avoid drawing candidates on top)
+        const pvPositions = new Set();
+        if (showPVForIndex !== null && showPVForIndex !== undefined && showPVForIndex < moves.length) {
+          const sel = moves[showPVForIndex];
+          if (sel.pv) {
+            const animLimit = (pvAnimCount > 0) ? Math.min(pvAnimCount, sel.pv.length) : sel.pv.length;
+            for (let j = 0; j < animLimit; j++) {
+              const pvm = sel.pv[j];
+              if (!pvm.pass && pvm.row !== undefined) {
+                pvPositions.add(`${pvm.row},${pvm.col}`);
+              }
+            }
+          }
+        }
+
+        // Best score for computing differentials
+        const bestScore = moves[0] && moves[0].scoreLead !== undefined ? moves[0].scoreLead : null;
+
+        // Draw top 10 candidate moves (numbered 0-9)
+        for (let i = 0; i < Math.min(moves.length, 10); i++) {
+          const m = moves[i];
+          if (m.pass || m.row === undefined) continue;
+          // Skip drawing this candidate if a PV stone occupies the same spot (and it's not the candidate being shown)
+          if (i !== showPVForIndex && pvPositions.has(`${m.row},${m.col}`)) continue;
+          // Skip drawing the candidate circle if it's the one being hovered/selected — PV stone "1" will replace it
+          if (i === showPVForIndex) continue;
+
+          const { x, y } = this.boardToPixel(m.row, m.col);
+          const r = this.stoneRadius;
+          const isHovered = (i === hoveredCandidateIndex);
+          const isSelected = (i === selectedPVIndex);
+          const highlight = isHovered || isSelected;
+
+          // Determine display text and color for this candidate
+          let circleText = '';
+          let circleColor = colors[i];
+          if (mode === 'winrate' && m.winrate !== undefined) {
+            // winrate is black's win probability; flip for white's turn so it shows current player's winrate
+            const raw = m.winrate * 100;
+            const pct = (this.game && this.game.currentPlayer === WHITE) ? (100 - raw).toFixed(1) : raw.toFixed(1);
+            circleText = pct;
+          } else if (mode === 'score' && m.scoreLead !== undefined) {
+            // scoreLead is from black's perspective; flip for white's turn so + = current player ahead
+            const sl = (this.game && this.game.currentPlayer === WHITE) ? -m.scoreLead : m.scoreLead;
+            circleText = sl >= 0 ? `+${sl.toFixed(1)}` : `${sl.toFixed(1)}`;
+          }
+
+          // Draw shaded circle with black text
+          if (circleText) {
+            // Semi-transparent circle background
+            ctx.beginPath();
+            ctx.arc(x, y, r * 0.95, 0, 2 * Math.PI);
+            ctx.fillStyle = colors[i] + '90'; // semi-transparent
+            ctx.fill();
+            // Black text
+            const fontSize = r * 0.9;
+            ctx.font = `bold ${fontSize}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#000';
+            ctx.fillText(circleText, x, y);
+          }
+        }
+
+        // Draw PV sequence for hovered or selected move
+        if (showPVForIndex !== null && showPVForIndex !== undefined && showPVForIndex < moves.length) {
+          const selected = moves[showPVForIndex];
+          if (selected.pv && selected.pv.length > 0) {
+            // Determine alternating colors: first PV move is the candidate's color
+            const startColor = this.game ? this.game.currentPlayer : BLACK;
+            // Limit to pvAnimCount if animating (0 = show none, undefined/null = show all)
+            const maxPV = (pvAnimCount > 0) ? Math.min(pvAnimCount, selected.pv.length) : selected.pv.length;
+            for (let j = 0; j < maxPV; j++) {
+              const pvm = selected.pv[j];
+              if (pvm.pass || pvm.row === undefined) continue;
+              // Move 1 is drawn as a PV stone (replacing the candidate circle)
+              // Skip if there's already a real stone there
+              if (this.game && this.game.board[pvm.row][pvm.col] !== 0) continue;
+
+              const { x, y } = this.boardToPixel(pvm.row, pvm.col);
+              const r = this.stoneRadius;
+              // Alternate B/W based on move number in sequence
+              const isBlack = ((startColor === BLACK ? j : j + 1) % 2 === 0);
+
+              // Draw semi-transparent stone
+              ctx.beginPath();
+              ctx.arc(x, y, r, 0, Math.PI * 2);
+              ctx.fillStyle = isBlack ? 'rgba(0,0,0,0.65)' : 'rgba(220,220,220,0.75)';
+              ctx.fill();
+              ctx.strokeStyle = isBlack ? 'rgba(0,0,0,0.9)' : 'rgba(160,160,160,0.9)';
+              ctx.lineWidth = 1;
+              ctx.stroke();
+
+              // PV move number
+              ctx.fillStyle = isBlack ? '#fff' : '#000';
+              ctx.font = `bold ${r * 1.1}px sans-serif`;
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(String(j + 1), x, y);
+            }
+          }
+        }
+      }
+    }
+
+    // ==================== AIBridge (WebSocket Client) ====================
+    class AIBridge {
+      constructor() {
+        this.ws = null;
+        this.connected = false;
+        this.engines = {};  // {"engine1": "name1", "engine2": "name2", ...}
+        this.onMove = null;
+        this.onPass = null;
+        this.onResign = null;
+        this.onError = null;
+        this.onReady = null;
+        this.onNewGameAck = null;
+        this.onAnalysis = null;
+        this.onConnectionChange = null;
+        this.onEngineInfo = null;
+        this._reconnectTimer = null;
+        this._reconnectDelay = 1000;
+        this._maxReconnectDelay = 10000;
+        this._url = 'ws://localhost:9001';
+        this._intentionalClose = false;
+      }
+
+      connect() {
+        if (this.ws && this.ws.readyState <= WebSocket.OPEN) return;
+        this._intentionalClose = false;
+        this._setStatus('connecting');
+
+        try {
+          this.ws = new WebSocket(this._url);
+        } catch (e) {
+          this._setStatus('disconnected');
+          this._scheduleReconnect();
+          return;
+        }
+
+        this.ws.onopen = () => {
+          this.connected = true;
+          this._reconnectDelay = 1000;
+          this._setStatus('connected');
+        };
+
+        this.ws.onclose = () => {
+          this.connected = false;
+          this._setStatus('disconnected');
+          if (!this._intentionalClose) {
+            this._scheduleReconnect();
+          }
+        };
+
+        this.ws.onerror = () => {};
+
+        this.ws.onmessage = (event) => {
+          const msg = JSON.parse(event.data);
+          switch (msg.type) {
+            case 'move':
+              if (this.onMove) this.onMove(msg.row, msg.col, msg.color);
+              break;
+            case 'pass':
+              if (this.onPass) this.onPass(msg.color);
+              break;
+            case 'resign':
+              if (this.onResign) this.onResign(msg.color);
+              break;
+            case 'error':
+              if (this.onError) this.onError(msg.message);
+              break;
+            case 'ready':
+              this.engines = msg.engines || {};
+              if (this.onEngineInfo) this.onEngineInfo(this.engines);
+              if (this.onReady) this.onReady();
+              break;
+            case 'engine_started':
+              // Engine was lazy-started — keep the config name, don't overwrite
+              break;
+            case 'new_game_ack':
+              if (this.onNewGameAck) this.onNewGameAck();
+              break;
+            case 'analysis':
+              if (this.onAnalysis) this.onAnalysis(msg);
+              break;
+          }
+        };
+      }
+
+      disconnect() {
+        this._intentionalClose = true;
+        clearTimeout(this._reconnectTimer);
+        if (this.ws) {
+          this.ws.close();
+        }
+        this.connected = false;
+        this._setStatus('disconnected');
+      }
+
+      _scheduleReconnect() {
+        clearTimeout(this._reconnectTimer);
+        this._reconnectTimer = setTimeout(() => {
+          this.connect();
+        }, this._reconnectDelay);
+        this._reconnectDelay = Math.min(this._reconnectDelay * 1.5, this._maxReconnectDelay);
+      }
+
+      _setStatus(status) {
+        if (this.onConnectionChange) this.onConnectionChange(status);
+      }
+
+      send(msg) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify(msg));
+        }
+      }
+
+      sendNewGame(size, komi, timeSettings, options) {
+        const msg = { type: 'new_game', size, komi };
+        if (timeSettings) {
+          msg.main_time = timeSettings.mainTime;
+          msg.byo_time = timeSettings.byoTime;
+          msg.byo_stones = timeSettings.byoStones;
+        }
+        if (options) {
+          if (options.useEngine) msg.use_engine = options.useEngine;
+          if (options.blackEngine) msg.black_engine = options.blackEngine;
+          if (options.whiteEngine) msg.white_engine = options.whiteEngine;
+        }
+        this.send(msg);
+      }
+      sendPlay(color, row, col) { this.send({ type: 'play', color, row, col }); }
+      sendGenMove(color) { this.send({ type: 'genmove', color }); }
+      sendPass(color) { this.send({ type: 'play_pass', color }); }
+      sendUndo() { this.send({ type: 'undo' }); }
+      sendDifficulty(visits) { this.send({ type: 'set_difficulty', visits }); }
+      sendAnalyze(moves, color, size, komi, visits, useEngine, duration) {
+        const msg = { type: 'analyze', moves, color, size, komi, visits };
+        if (useEngine) msg.use_engine = useEngine;
+        if (duration) msg.duration = duration;
+        this.send(msg);
+      }
+    }
+
+    // ==================== GoController ====================
+    class GoController {
+      constructor() {
+        this.canvas = document.getElementById('go-board');
+        this.renderer = new GoRenderer(this.canvas);
+        this.game = null;
+        this.hoverPos = null;
+        this.statusTimeout = null;
+
+        // AI state
+        this.gameMode = 'hvh';
+        this.aiColor = null;
+        this.aiThinking = false;
+        this._aiVsAiStopped = false;
+        this._aiVsAiStartRequested = false;
+        this.aiBridge = new AIBridge();
+
+        // Analysis state
+        this._sgfMoves = null;
+        this._sgfSize = 19;
+        this._sgfKomi = 6.5;
+        this._analysisViewMove = 0;
+        this._analysisResults = {};
+        this._analysisOverlay = null;
+        this._analysisOwnership = null;
+        this._selectedPVIndex = null;
+        this._hoveredCandidateIndex = null;
+        this._analysisDisplayMode = 'winrate'; // 'winrate' or 'score'
+        this._showTerritory = false;           // toggle for dead stones & area
+        this._pvAnimTimer = null;       // animation interval ID
+        this._pvAnimCount = 0;          // how many PV stones to show so far
+        this._autoAnalyzing = false;
+        this._autoAnalyzeIndex = 0;
+        // Scoring state (KataGo ownership-based scoring)
+        this._scoringPending = false;
+        this._scoringOwnership = null;
+        this._correctedScore = null;
+        this.setupAIBridge();
+
+        this.newGame(19);
+        this.bindEvents();
+      }
+
+      newGame(size) {
+        this.game = new GoGame(size);
+        this.renderer.setGame(this.game);
+        this.hoverPos = null;
+        this.setAIThinking(false);
+
+        // Clear analysis state
+        this._sgfMoves = null;
+        this._analysisResults = {};
+        this._analysisOverlay = null;
+        this._analysisOwnership = null;
+        this._selectedPVIndex = null;
+        this._hoveredCandidateIndex = null;
+        this._analysisViewMove = 0;
+        this._showTerritory = false;
+        this._autoAnalyzing = false;
+        this._autoAnalyzeIndex = 0;
+        this._scoringPending = false;
+        this._scoringOwnership = null;
+        this._correctedScore = null;
+        this._stopPVAnimation();
+        document.getElementById('analysis-panel').classList.remove('visible');
+        clearTimeout(this.statusTimeout);
+        document.getElementById('status-message').innerHTML = '';
+        const territoryBtn = document.getElementById('show-territory-btn');
+        territoryBtn.style.background = '#333';
+        territoryBtn.style.color = '#ccc';
+
+        this.render();
+        this.updateUI();
+        this.hideScore();
+
+        // Update size buttons
+        document.querySelectorAll('.size-btn').forEach(btn => {
+          btn.classList.toggle('active', parseInt(btn.dataset.size) === size);
+        });
+
+        // Sync with KataGo if in AI mode (but NOT AI vs AI — that uses Start button)
+        this._aiVsAiStopped = (this.gameMode === 'aivai');
+        if (this.gameMode !== 'hvh' && this.gameMode !== 'aivai' && this.aiBridge.connected) {
+          const timeSettings = { mainTime: 0, byoTime: 5, byoStones: 1 };
+          const useEngine = document.getElementById('hvai-engine-select').value;
+          this.aiBridge.sendNewGame(size, this.game.komi, timeSettings, { useEngine });
+          const visits = parseInt(document.getElementById('ai-difficulty').value);
+          this.aiBridge.sendDifficulty(visits);
+          // NOTE: Don't call requestAIMove() here — onNewGameAck will do it
+          // after KataGo confirms the board is ready. Calling it here too
+          // causes a race condition (double genmove).
+        }
+        if (this.gameMode === 'aivai') {
+          this._updateAIVsAIButtons();
+        }
+      }
+
+      bindEvents() {
+        // Canvas click
+        this.canvas.addEventListener('click', (e) => this.handleClick(e));
+
+        // Canvas hover
+        this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+        this.canvas.addEventListener('mouseleave', () => {
+          this.hoverPos = null;
+          this._hoveredCandidateIndex = null;
+          this.render();
+        });
+
+        // Mouse wheel on canvas — navigate SGF moves
+        this.canvas.addEventListener('wheel', (e) => {
+          if (!this._sgfMoves) return; // Only works in SGF review mode
+          e.preventDefault();
+          const current = this._analysisViewMove || 0;
+          if (e.deltaY > 0) {
+            // Scroll down = next move
+            this.analysisGoTo(current + 1);
+          } else if (e.deltaY < 0) {
+            // Scroll up = previous move
+            this.analysisGoTo(current - 1);
+          }
+        }, { passive: false });
+
+        // Arrow keys — navigate SGF moves
+        document.addEventListener('keydown', (e) => {
+          if (!this._sgfMoves) return;
+          const current = this._analysisViewMove || 0;
+          if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            this.analysisGoTo(current - 1);
+          } else if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            this.analysisGoTo(current + 1);
+          } else if (e.key === 'Home') {
+            e.preventDefault();
+            this.analysisGoTo(0);
+          } else if (e.key === 'End') {
+            e.preventDefault();
+            this.analysisGoTo(this._sgfMoves.length);
+          } else if (e.key === 'F5') {
+            e.preventDefault();
+            this.deeperAnalysis();
+          }
+        });
+
+        // Buttons
+        document.getElementById('pass-btn').addEventListener('click', () => this.handlePass());
+        document.getElementById('resign-btn').addEventListener('click', () => this.handleResign());
+        document.getElementById('undo-btn').addEventListener('click', () => this.handleUndo());
+        document.getElementById('new-game-btn').addEventListener('click', () => this.newGame(this.game.size));
+        document.getElementById('save-sgf-btn').addEventListener('click', () => this.saveSGF());
+        document.getElementById('load-sgf-btn').addEventListener('click', () => {
+          document.getElementById('sgf-file-input').click();
+        });
+        document.getElementById('sgf-file-input').addEventListener('change', (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            this.loadSGF(ev.target.result);
+          };
+          reader.readAsText(file);
+          e.target.value = ''; // Reset so same file can be loaded again
+        });
+        document.getElementById('close-score-btn').addEventListener('click', () => this.newGame(this.game.size));
+
+        // Analysis controls — Analyze button toggles panel and starts auto-analyze
+        document.getElementById('analyze-btn').addEventListener('click', () => this.toggleAnalysis());
+        document.getElementById('analysis-start').addEventListener('click', () => this.analysisGoTo(0));
+        document.getElementById('analysis-prev').addEventListener('click', () => {
+          this.analysisGoTo((this._analysisViewMove || 0) - 1);
+        });
+        document.getElementById('analysis-next').addEventListener('click', () => {
+          this.analysisGoTo((this._analysisViewMove || 0) + 1);
+        });
+        document.getElementById('analysis-end').addEventListener('click', () => {
+          this.analysisGoTo(this._sgfMoves ? this._sgfMoves.length : 0);
+        });
+        document.getElementById('analysis-slider').addEventListener('input', (e) => {
+          this.analysisGoTo(parseInt(e.target.value));
+        });
+
+        // Win% / Score toggle
+        document.getElementById('show-winrate-btn').addEventListener('click', () => {
+          this._analysisDisplayMode = 'winrate';
+          document.getElementById('show-winrate-btn').style.background = '#4caf50';
+          document.getElementById('show-winrate-btn').style.color = '#fff';
+          document.getElementById('show-score-btn').style.background = '#333';
+          document.getElementById('show-score-btn').style.color = '#ccc';
+          this.render();
+        });
+        document.getElementById('show-score-btn').addEventListener('click', () => {
+          this._analysisDisplayMode = 'score';
+          document.getElementById('show-score-btn').style.background = '#4caf50';
+          document.getElementById('show-score-btn').style.color = '#fff';
+          document.getElementById('show-winrate-btn').style.background = '#333';
+          document.getElementById('show-winrate-btn').style.color = '#ccc';
+          this.render();
+        });
+
+        // Territory/dead stones toggle
+        document.getElementById('show-territory-btn').addEventListener('click', () => {
+          this._showTerritory = !this._showTerritory;
+          const btn = document.getElementById('show-territory-btn');
+          btn.style.background = this._showTerritory ? '#4caf50' : '#333';
+          btn.style.color = this._showTerritory ? '#fff' : '#ccc';
+          this.render();
+        });
+
+        // Deeper analysis button
+        document.getElementById('deeper-analysis-btn').addEventListener('click', () => this.deeperAnalysis());
+
+        // Human vs AI engine change — restart game with new engine
+        document.getElementById('hvai-engine-select').addEventListener('change', () => {
+          if (this.gameMode === 'hvai-b' || this.gameMode === 'hvai-w') {
+            this.newGame(this.game.size);
+          }
+        });
+
+        // AI vs AI Start/Stop
+        document.getElementById('start-aivai-btn').addEventListener('click', () => this.startAIVsAI());
+        document.getElementById('stop-aivai-btn').addEventListener('click', () => this.stopAIVsAI());
+
+        // Board size selector
+        document.querySelectorAll('.size-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            this.newGame(parseInt(btn.dataset.size));
+          });
+        });
+
+        // Mode selector
+        document.querySelectorAll('.mode-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            this.setGameMode(btn.dataset.mode);
+          });
+        });
+
+        // AI difficulty
+        document.getElementById('ai-difficulty').addEventListener('change', (e) => {
+          const visits = parseInt(e.target.value);
+          if (this.aiBridge.connected) {
+            this.aiBridge.sendDifficulty(visits);
+          }
+        });
+
+        // Resize
+        let resizeTimer;
+        window.addEventListener('resize', () => {
+          clearTimeout(resizeTimer);
+          resizeTimer = setTimeout(() => {
+            this.renderer.resize();
+            this.render();
+          }, 80);
+        });
+      }
+
+      getCanvasCoords(event) {
+        const rect = this.canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        const x = (event.clientX - rect.left) * dpr;
+        const y = (event.clientY - rect.top) * dpr;
+        return { x, y };
+      }
+
+      handleClick(event) {
+        if (this.game.gameOver) return;
+        if (this.aiThinking) return;
+        if (this.gameMode === 'aivai') return;
+        // In AI mode, only allow clicks on human's turn
+        if (this.gameMode !== 'hvh' && this.game.currentPlayer === this.aiColor) return;
+
+        const { x, y } = this.getCanvasCoords(event);
+        const pos = this.renderer.pixelToBoard(x, y);
+        if (!pos) return;
+
+        const result = this.game.playMove(pos.row, pos.col);
+        if (result.valid) {
+          this.render();
+          this.updateUI();
+          if (result.captures > 0) {
+            this.showStatus(`Captured ${result.captures} stone${result.captures > 1 ? 's' : ''}!`);
+          }
+          // In AI mode: inform KataGo and request AI response
+          // After playMove(), currentPlayer has switched to the AI.
+          // So the human who just played is the OPPOSITE of currentPlayer.
+          if (this.gameMode !== 'hvh' && this.aiBridge.connected && !this.game.gameOver) {
+            const humanColor = this.game.currentPlayer === BLACK ? 'W' : 'B';
+            this.aiBridge.sendPlay(humanColor, pos.row, pos.col);
+            this.requestAIMove();
+          }
+        } else {
+          this.showStatus(result.reason);
+        }
+      }
+
+      handleMouseMove(event) {
+        if (!this.game) return;
+
+        const { x, y } = this.getCanvasCoords(event);
+        const pos = this.renderer.pixelToBoard(x, y);
+
+        // Analysis candidate hover detection
+        if (this._analysisOverlay && this._analysisOverlay.length > 0) {
+          let foundCandidate = null;
+          for (let i = 0; i < Math.min(this._analysisOverlay.length, 10); i++) {
+            const m = this._analysisOverlay[i];
+            if (m.pass || m.row === undefined) continue;
+            if (pos && pos.row === m.row && pos.col === m.col) {
+              foundCandidate = i;
+              break;
+            }
+          }
+          if (this._hoveredCandidateIndex !== foundCandidate) {
+            this._hoveredCandidateIndex = foundCandidate;
+            // Start or stop PV animation
+            if (foundCandidate !== null) {
+              this._startPVAnimation(foundCandidate);
+            } else {
+              this._stopPVAnimation();
+            }
+            this.render();
+            return;
+          }
+          if (foundCandidate !== null) return; // Still hovering same candidate
+        }
+
+        // Normal ghost stone hover (only during active play)
+        if (this.game.gameOver) return;
+        if (this.aiThinking) return;
+        if (this.gameMode === 'aivai') return;
+        if (this.gameMode !== 'hvh' && this.game.currentPlayer === this.aiColor) return;
+
+        const prev = this.hoverPos;
+        if (pos && this.game.board[pos.row][pos.col] === EMPTY) {
+          if (!prev || prev.row !== pos.row || prev.col !== pos.col) {
+            this.hoverPos = pos;
+            this.render();
+          }
+        } else if (prev) {
+          this.hoverPos = null;
+          this.render();
+        }
+      }
+
+      handlePass() {
+        if (this.game.gameOver) return;
+        if (this.aiThinking) return;
+        if (this.gameMode !== 'hvh' && this.game.currentPlayer === this.aiColor) return;
+
+        const playerColor = this.game.currentPlayer === BLACK ? 'B' : 'W';
+        const playerName = this.game.currentPlayer === BLACK ? 'Black' : 'White';
+        this.game.pass();
+        this.showStatus(`${playerName} passed`);
+        this.render();
+        this.updateUI();
+
+        if (this.game.gameOver) {
+          this._handleGameEndScoring();
+          return;
+        }
+
+        // In AI mode: inform KataGo and request AI move
+        if (this.gameMode !== 'hvh' && this.aiBridge.connected) {
+          this.aiBridge.sendPass(playerColor);
+          this.requestAIMove();
+        }
+      }
+
+      handleResign() {
+        if (this.game.gameOver) return;
+        if (this.aiThinking) return;
+        if (this.gameMode !== 'hvh' && this.game.currentPlayer === this.aiColor) return;
+
+        const player = this.game.currentPlayer === BLACK ? 'Black' : 'White';
+        this.game.resign();
+        this.showStatus(`${player} resigned`);
+        this.render();
+        this.updateUI();
+        this.showScore();
+      }
+
+      handleUndo() {
+        if (this.aiThinking) return;
+
+        if (this.gameMode !== 'hvh' && this.game.moveHistory.length >= 2) {
+          // In AI mode: undo both AI's move and human's move
+          const undone1 = this.game.undo();
+          if (undone1 && this.aiBridge.connected) this.aiBridge.sendUndo();
+          const undone2 = this.game.undo();
+          if (undone2 && this.aiBridge.connected) this.aiBridge.sendUndo();
+        } else {
+          this.game.undo();
+        }
+
+        // Clear scoring state
+        this._scoringPending = false;
+        this._scoringOwnership = null;
+        this._correctedScore = null;
+
+        this.hoverPos = null;
+        this.render();
+        this.updateUI();
+        this.hideScore();
+        this.showStatus('Move undone');
+      }
+
+      _startPVAnimation(candidateIdx) {
+        this._stopPVAnimation();
+        this._pvAnimCount = 1; // show first stone immediately
+        const moves = this._analysisOverlay;
+        if (!moves || !moves[candidateIdx] || !moves[candidateIdx].pv) return;
+        const totalPV = moves[candidateIdx].pv.length;
+        this._pvAnimTimer = setInterval(() => {
+          if (this._pvAnimCount < totalPV) {
+            this._pvAnimCount++;
+            this.render();
+          } else {
+            clearInterval(this._pvAnimTimer);
+            this._pvAnimTimer = null;
+          }
+        }, 500); // 500ms per stone
+      }
+
+      _stopPVAnimation() {
+        if (this._pvAnimTimer) {
+          clearInterval(this._pvAnimTimer);
+          this._pvAnimTimer = null;
+        }
+        this._pvAnimCount = 0;
+      }
+
+      render() {
+        // Show simple territory squares only if no KataGo ownership overlay will replace it
+        const showSimpleTerritory = this.game.gameOver && this.game.consecutivePasses >= 2 && !this._scoringOwnership;
+        this.renderer.draw(this.hoverPos, showSimpleTerritory);
+        // Draw KataGo ownership overlay for end-of-game scoring
+        if (this._scoringOwnership && this.game.gameOver) {
+          this.renderer.drawOwnershipOverlay(this._scoringOwnership, this.game);
+        }
+        // Draw ownership overlay for analysis mode
+        else if (this._showTerritory && this._analysisOwnership) {
+          this.renderer.drawOwnershipOverlay(this._analysisOwnership, this.game);
+        }
+        // Draw analysis candidate overlay on top
+        if (this._analysisOverlay) {
+          this.renderer.drawAnalysisOverlay(
+            this._analysisOverlay, this._selectedPVIndex,
+            this._hoveredCandidateIndex, this._analysisDisplayMode,
+            this._pvAnimCount
+          );
+        }
+      }
+
+      updateUI() {
+        const g = this.game;
+        const isAIMode = this.gameMode !== 'hvh';
+        const isAIVsAI = this.gameMode === 'aivai';
+        const isAITurn = isAIMode && !isAIVsAI && g.currentPlayer === this.aiColor;
+
+        // Turn indicator — hide when AI is thinking (spinner shows color instead)
+        const turnEl = document.getElementById('turn-indicator');
+        if (this.aiThinking) {
+          turnEl.style.display = 'none';
+        } else {
+          turnEl.style.display = '';
+          if (g.gameOver) {
+            const winnerName = g.winner === BLACK ? 'Black' : g.winner === WHITE ? 'White' : 'No one';
+            turnEl.textContent = `${winnerName} wins`;
+          } else if (isAIVsAI) {
+            const colorName = g.currentPlayer === BLACK ? 'Black' : 'White';
+            turnEl.textContent = `${colorName}'s Turn`;
+          } else if (isAIMode) {
+            turnEl.textContent = isAITurn ? 'AI\'s Turn' : 'Your Turn';
+          } else {
+            turnEl.textContent = g.currentPlayer === BLACK ? "Black's Turn" : "White's Turn";
+          }
+        }
+
+        // Player labels
+        if (isAIVsAI) {
+          document.querySelector('#black-info .player-name').textContent = 'AI (Black)';
+          document.querySelector('#white-info .player-name').textContent = 'AI (White)';
+        } else if (isAIMode) {
+          const humanIsBlack = this.gameMode === 'hvai-b';
+          document.querySelector('#black-info .player-name').textContent = humanIsBlack ? 'You (Black)' : 'AI (Black)';
+          document.querySelector('#white-info .player-name').textContent = humanIsBlack ? 'AI (White)' : 'You (White)';
+        } else {
+          document.querySelector('#black-info .player-name').textContent = 'Black';
+          document.querySelector('#white-info .player-name').textContent = 'White';
+        }
+
+        // Captures
+        document.querySelector('#black-info .captures').textContent = `Cap: ${g.captures[BLACK]}`;
+        document.querySelector('#white-info .captures').textContent = `Cap: ${g.captures[WHITE]}`;
+
+        // Active highlight
+        document.getElementById('black-info').classList.toggle('active', !g.gameOver && g.currentPlayer === BLACK);
+        document.getElementById('white-info').classList.toggle('active', !g.gameOver && g.currentPlayer === WHITE);
+
+        // Move count (removed from UI)
+
+        // Button states
+        const blocked = g.gameOver || this.aiThinking || isAIVsAI;
+        document.getElementById('pass-btn').disabled = blocked;
+        document.getElementById('resign-btn').disabled = g.gameOver || isAIVsAI;
+        document.getElementById('undo-btn').disabled = g.moveHistory.length === 0 || this.aiThinking || isAIVsAI;
+
+        // Canvas cursor
+        this.canvas.style.cursor = (this.aiThinking || isAITurn || isAIVsAI || g.gameOver) ? 'default' : 'pointer';
+      }
+
+      showStatus(msg, spinning = false) {
+        const el = document.getElementById('status-message');
+        if (spinning) {
+          el.innerHTML = '<span class="status-spinner"></span>' + this._escapeHtml(msg);
+          // Don't auto-clear while spinning
+          clearTimeout(this.statusTimeout);
+        } else {
+          el.innerHTML = this._escapeHtml(msg);
+          clearTimeout(this.statusTimeout);
+          this.statusTimeout = setTimeout(() => { el.innerHTML = ''; }, 3000);
+        }
+      }
+
+      _escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      showScore() {
+        const overlay = document.getElementById('score-overlay');
+        const details = document.getElementById('score-details');
+        const title = document.getElementById('score-title');
+
+        if (this.game.winner && this.game.consecutivePasses < 2) {
+          // Resignation
+          const winner = this.game.winner === BLACK ? 'Black' : 'White';
+          title.textContent = 'Resignation';
+          details.innerHTML = `<p class="score-winner">${winner} wins by resignation</p>`;
+        } else {
+          // Scoring — use KataGo corrected score if available
+          const score = this._correctedScore || this.game.calculateScore();
+          const winner = score.black.total > score.white.total ? 'Black'
+            : score.white.total > score.black.total ? 'White' : 'Tie';
+          const margin = Math.abs(score.black.total - score.white.total);
+
+          title.textContent = 'Game Over';
+          const bIsWinner = winner === 'Black';
+          const wIsWinner = winner === 'White';
+
+          const hasDeadStones = (score.black.dead || 0) + (score.white.dead || 0) > 0;
+          const deadRow = hasDeadStones
+            ? `<tr><td>Dead stones</td><td>${score.black.dead || 0}</td><td>${score.white.dead || 0}</td></tr>`
+            : '';
+
+          details.innerHTML = `
+            <p class="score-winner">${winner === 'Tie' ? 'Tie game!' : `${winner} wins by ${margin} point${margin !== 1 ? 's' : ''}`}</p>
+            <table class="score-table">
+              <tr><th></th><th>Black</th><th>White</th></tr>
+              <tr><td>Stones</td><td>${score.black.stones}</td><td>${score.white.stones}</td></tr>
+              <tr><td>Territory</td><td>${score.black.territory}</td><td>${score.white.territory}</td></tr>
+              ${deadRow}
+              <tr><td>Komi</td><td>-</td><td>${score.white.komi}</td></tr>
+              <tr class="${bIsWinner ? 'winner-row' : ''}${wIsWinner ? 'winner-row' : ''}">
+                <td><strong>Total</strong></td>
+                <td><strong>${score.black.total}</strong></td>
+                <td><strong>${score.white.total}</strong></td>
+              </tr>
+            </table>
+          `;
+        }
+
+        overlay.classList.remove('hidden');
+      }
+
+      hideScore() {
+        document.getElementById('score-overlay').classList.add('hidden');
+      }
+
+      // ── KataGo Scoring Methods ──
+
+      _handleGameEndScoring() {
+        // Only use KataGo scoring for games that ended by double pass
+        if (this.game.consecutivePasses < 2) {
+          this.showScore();
+          return;
+        }
+
+        // Check if server is connected
+        if (!this.aiBridge || !this.aiBridge.connected) {
+          this.showScore();
+          return;
+        }
+
+        // Request KataGo scoring analysis
+        this._scoringPending = true;
+        this._correctedScore = null;
+        this._scoringOwnership = null;
+        this.showStatus('Computing final score with KataGo...', true);
+        this._requestScoringAnalysis();
+      }
+
+      _requestScoringAnalysis() {
+        const game = this.game;
+        const movesToSend = [];
+
+        for (const entry of game.moveHistory) {
+          const color = entry.player === BLACK ? 'B' : 'W';
+          if (entry.type === 'pass') {
+            movesToSend.push({ color, pass: true });
+          } else if (entry.type === 'move') {
+            movesToSend.push({ color, row: entry.row, col: entry.col });
+          }
+        }
+
+        // Analyze from the perspective of whose turn it would be
+        const nextColor = game.currentPlayer === BLACK ? 'B' : 'W';
+        const useEngine = this._getActiveEngineKey();
+
+        this.aiBridge.sendAnalyze(
+          movesToSend, nextColor, game.size, game.komi,
+          200, useEngine, 5
+        );
+      }
+
+      _getActiveEngineKey() {
+        if (this.gameMode === 'hvai-b' || this.gameMode === 'hvai-w') {
+          return document.getElementById('hvai-engine-select').value;
+        }
+        if (this.gameMode === 'aivai') {
+          return document.getElementById('engine-black-select').value;
+        }
+        const keys = Object.keys(this.aiBridge.engines);
+        return keys.length > 0 ? keys[0] : undefined;
+      }
+
+      calculateScoreWithOwnership(ownership) {
+        const game = this.game;
+        const size = game.size;
+        const DEAD_THRESHOLD = 0.5;
+
+        // Create cleaned board with dead stones removed
+        const cleanBoard = Array.from({ length: size }, (_, r) =>
+          Array.from({ length: size }, (_, c) => game.board[r][c])
+        );
+
+        let blackDead = 0, whiteDead = 0;
+
+        for (let r = 0; r < size; r++) {
+          for (let c = 0; c < size; c++) {
+            const stone = game.board[r][c];
+            const own = ownership[r][c];
+            if (stone === BLACK && own > DEAD_THRESHOLD) {
+              cleanBoard[r][c] = EMPTY;
+              blackDead++;
+            } else if (stone === WHITE && own < -DEAD_THRESHOLD) {
+              cleanBoard[r][c] = EMPTY;
+              whiteDead++;
+            }
+          }
+        }
+
+        // Flood-fill territory on cleaned board
+        const visited = Array.from({ length: size }, () => new Array(size).fill(false));
+        let blackTerritory = 0, whiteTerritory = 0;
+        let blackStones = 0, whiteStones = 0;
+        const territoryMap = Array.from({ length: size }, () => new Array(size).fill(EMPTY));
+
+        for (let r = 0; r < size; r++) {
+          for (let c = 0; c < size; c++) {
+            if (cleanBoard[r][c] === BLACK) blackStones++;
+            else if (cleanBoard[r][c] === WHITE) whiteStones++;
+          }
+        }
+
+        for (let r = 0; r < size; r++) {
+          for (let c = 0; c < size; c++) {
+            if (cleanBoard[r][c] !== EMPTY || visited[r][c]) continue;
+            const region = [];
+            const queue = [[r, c]];
+            visited[r][c] = true;
+            let bordersBlack = false, bordersWhite = false;
+
+            while (queue.length > 0) {
+              const [cr, cc] = queue.shift();
+              region.push([cr, cc]);
+              for (const [nr, nc] of game.getNeighbors(cr, cc)) {
+                if (cleanBoard[nr][nc] === EMPTY && !visited[nr][nc]) {
+                  visited[nr][nc] = true;
+                  queue.push([nr, nc]);
+                } else if (cleanBoard[nr][nc] === BLACK) {
+                  bordersBlack = true;
+                } else if (cleanBoard[nr][nc] === WHITE) {
+                  bordersWhite = true;
+                }
+              }
+            }
+
+            let owner = EMPTY;
+            if (bordersBlack && !bordersWhite) { blackTerritory += region.length; owner = BLACK; }
+            else if (bordersWhite && !bordersBlack) { whiteTerritory += region.length; owner = WHITE; }
+
+            for (const [pr, pc] of region) {
+              territoryMap[pr][pc] = owner;
+            }
+          }
+        }
+
+        // Chinese scoring: total = stones on board + territory
+        const blackTotal = blackStones + blackTerritory;
+        const whiteTotal = whiteStones + whiteTerritory + game.komi;
+
+        return {
+          black: { stones: blackStones, territory: blackTerritory, dead: blackDead, total: blackTotal },
+          white: { stones: whiteStones, territory: whiteTerritory, dead: whiteDead, komi: game.komi, total: whiteTotal },
+          territoryMap,
+        };
+      }
+
+      // ── AI Integration Methods ──
+
+      setupAIBridge() {
+        const bridge = this.aiBridge;
+
+        bridge.onMove = (row, col, color) => {
+          setTimeout(() => {
+            const result = this.game.playMove(row, col);
+            if (result.valid) {
+              this.setAIThinking(false);
+              this.render();
+              this.updateUI();
+              if (result.captures > 0) {
+                this.showStatus(`AI captured ${result.captures} stone${result.captures > 1 ? 's' : ''}!`);
+              }
+              // In AI vs AI mode, chain the next move after a delay
+              if (this.gameMode === 'aivai' && !this.game.gameOver && !this._aiVsAiStopped) {
+                const delay = parseInt(document.getElementById('ai-speed').value) || 0;
+                setTimeout(() => this.requestAIMove(), delay);
+              }
+            } else {
+              this.setAIThinking(false);
+              this.showStatus('AI move error: ' + result.reason);
+            }
+          }, 250);
+        };
+
+        bridge.onPass = (color) => {
+          setTimeout(() => {
+            this.game.pass();
+            this.setAIThinking(false);
+            const colorName = color === 'B' ? 'Black' : 'White';
+            this.showStatus(`${colorName} AI passed`);
+            this.render();
+            this.updateUI();
+            if (this.game.gameOver) {
+              this._aiVsAiStopped = true;
+              this._updateAIVsAIButtons();
+              this._handleGameEndScoring();
+            } else if (this.gameMode === 'aivai' && !this._aiVsAiStopped) {
+              const delay = parseInt(document.getElementById('ai-speed').value) || 0;
+              setTimeout(() => this.requestAIMove(), delay);
+            }
+          }, 250);
+        };
+
+        bridge.onResign = (color) => {
+          setTimeout(() => {
+            this.game.resign();
+            this.setAIThinking(false);
+            this._aiVsAiStopped = true;
+            this._updateAIVsAIButtons();
+            const colorName = color === 'B' ? 'Black' : 'White';
+            this.showStatus(`${colorName} AI resigned!`);
+            this.render();
+            this.updateUI();
+            this.showScore();
+          }, 250);
+        };
+
+        bridge.onError = (message) => {
+          this.setAIThinking(false);
+          this.showStatus('AI error: ' + message);
+          // If scoring was pending, fall back to simple scoring
+          if (this._scoringPending) {
+            this._scoringPending = false;
+            this.showStatus('KataGo scoring failed, using simple scoring');
+            this.showScore();
+          }
+          // If auto-analyzing, continue to next move
+          if (this._autoAnalyzing) {
+            this._autoAnalyzeNext();
+          }
+        };
+
+        bridge.onAnalysis = (data) => {
+          // Handle scoring analysis response
+          if (this._scoringPending && data.ownership) {
+            this._scoringPending = false;
+            this._scoringOwnership = data.ownership;
+            this._correctedScore = this.calculateScoreWithOwnership(data.ownership);
+
+            // Update game.winner based on corrected score
+            if (this._correctedScore.black.total > this._correctedScore.white.total) {
+              this.game.winner = BLACK;
+            } else if (this._correctedScore.white.total > this._correctedScore.black.total) {
+              this.game.winner = WHITE;
+            } else {
+              this.game.winner = null;
+            }
+
+            this.render();
+            this.updateUI();
+            this.showScore();
+            return;
+          }
+
+          // Cache the result
+          if (this._analysisResults) {
+            this._analysisResults[data.moveNumber] = data;
+          }
+          // Always update display if this result is for the currently viewed position
+          if (data.moveNumber === this._analysisViewMove) {
+            this._showAnalysis(data);
+            if (!this._autoAnalyzing) {
+              this.showStatus(`Analysis complete (move ${data.moveNumber})`);
+            }
+          }
+          // If auto-analyzing, advance — but only if this was the position
+          // we were auto-analyzing (not a manual request from slider navigation)
+          if (this._autoAnalyzing) {
+            // The auto-analyzer always processes _autoAnalyzeIndex.
+            // Any result that comes back (whether for auto or manual) should
+            // trigger the next auto-analyze step, since the server is now free.
+            this._autoAnalyzeNext();
+          }
+        };
+
+        bridge.onReady = () => {
+          // Server says "ready" only on initial connection.
+          // Send new_game to sync KataGo board state with browser.
+          if (this.gameMode !== 'hvh' && this.gameMode !== 'aivai') {
+            const timeSettings = { mainTime: 0, byoTime: 5, byoStones: 1 };
+            const useEngine = document.getElementById('hvai-engine-select').value;
+            this.aiBridge.sendNewGame(this.game.size, this.game.komi, timeSettings, { useEngine });
+            const visits = parseInt(document.getElementById('ai-difficulty').value);
+            this.aiBridge.sendDifficulty(visits);
+          }
+        };
+
+        bridge.onNewGameAck = () => {
+          // KataGo has acknowledged the new game (board cleared, komi set).
+          // Now it's safe to request AI's first move if AI plays Black or AI vs AI.
+          if (this.gameMode === 'hvai-w' && this.game.moveHistory.length === 0) {
+            this.requestAIMove();
+          }
+          // For AI vs AI, we wait for the Start button instead of auto-starting
+          if (this.gameMode === 'aivai' && this._aiVsAiStartRequested) {
+            this._aiVsAiStartRequested = false;
+            this.requestAIMove();
+          }
+        };
+
+        bridge.onEngineInfo = (engines) => {
+          this._updateEngineSelectors(engines);
+        };
+
+        bridge.onConnectionChange = (status) => {
+          const el = document.getElementById('conn-status');
+          el.className = 'conn-status ' + status;
+          const textEl = el.querySelector('.conn-text');
+          textEl.textContent = status === 'connected' ? 'AI Connected'
+            : status === 'connecting' ? 'Connecting...'
+            : 'Disconnected';
+        };
+      }
+
+      _updateEngineSelectors(engines) {
+        const blackSel = document.getElementById('engine-black-select');
+        const whiteSel = document.getElementById('engine-white-select');
+        const hvaiSel = document.getElementById('hvai-engine-select');
+        const analysisSel = document.getElementById('analysis-engine-select');
+
+        const entries = Object.entries(engines);
+        const opts = entries.map(([key, label]) =>
+          `<option value="${key}">${this._escHtml(label)}</option>`
+        ).join('');
+
+        blackSel.innerHTML = opts;
+        hvaiSel.innerHTML = opts;
+        analysisSel.innerHTML = opts;
+
+        // White defaults to second engine if available
+        const opts2 = entries.map(([key, label], idx) =>
+          `<option value="${key}"${idx === 1 ? ' selected' : ''}>${this._escHtml(label)}</option>`
+        ).join('');
+        whiteSel.innerHTML = opts2;
+      }
+
+      _escHtml(s) {
+        return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      }
+
+      _updateAIVsAIButtons() {
+        const startBtn = document.getElementById('start-aivai-btn');
+        const stopBtn = document.getElementById('stop-aivai-btn');
+        if (this.gameMode === 'aivai') {
+          if (this._aiVsAiStopped || !this.aiThinking) {
+            startBtn.style.display = '';
+            stopBtn.style.display = 'none';
+          } else {
+            startBtn.style.display = 'none';
+            stopBtn.style.display = '';
+          }
+        }
+      }
+
+      setGameMode(mode) {
+        // Stop any running analysis immediately
+        this._autoAnalyzing = false;
+
+        this.gameMode = mode;
+        this._aiVsAiStopped = true;
+        this._aiVsAiStartRequested = false;
+
+        // Update mode buttons
+        document.querySelectorAll('.mode-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.mode === mode);
+        });
+
+        // Show/hide AI settings and speed/engine controls
+        const isHvAI = mode === 'hvai-b' || mode === 'hvai-w';
+        document.getElementById('ai-settings').style.display = mode === 'hvh' ? 'none' : 'flex';
+        document.getElementById('ai-speed-control').style.display = mode === 'aivai' ? 'inline' : 'none';
+        document.getElementById('hvai-engine-row').style.display = isHvAI ? 'flex' : 'none';
+        document.getElementById('engine-select-row').style.display = mode === 'aivai' ? 'flex' : 'none';
+
+        // Reset AI vs AI buttons
+        if (mode === 'aivai') {
+          document.getElementById('start-aivai-btn').style.display = '';
+          document.getElementById('stop-aivai-btn').style.display = 'none';
+        }
+
+        if (mode === 'hvh') {
+          this.aiColor = null;
+          this.aiBridge.disconnect();
+        } else if (mode === 'aivai') {
+          this.aiColor = null;  // Both colors are AI
+          this.aiBridge.connect();
+        } else {
+          // 'hvai-b' = human is Black, AI is White
+          // 'hvai-w' = human is White, AI is Black
+          this.aiColor = mode === 'hvai-b' ? WHITE : BLACK;
+          this.aiBridge.connect();
+        }
+
+        // Start fresh game in the new mode (but don't auto-start AI vs AI)
+        this.newGame(this.game.size);
+      }
+
+      startAIVsAI() {
+        if (this.gameMode !== 'aivai' || !this.aiBridge.connected) {
+          this.showStatus('Not connected to AI server');
+          return;
+        }
+
+        this._aiVsAiStopped = false;
+        this._aiVsAiStartRequested = true;
+
+        // Send new game with black/white engine selections
+        const timeSettings = { mainTime: 0, byoTime: 5, byoStones: 1 };
+        const blackEngine = document.getElementById('engine-black-select').value;
+        const whiteEngine = document.getElementById('engine-white-select').value;
+        this.aiBridge.sendNewGame(
+          this.game.size, this.game.komi, timeSettings,
+          { blackEngine, whiteEngine }
+        );
+        const visits = parseInt(document.getElementById('ai-difficulty').value);
+        this.aiBridge.sendDifficulty(visits);
+
+        // Update buttons
+        document.getElementById('start-aivai-btn').style.display = 'none';
+        document.getElementById('stop-aivai-btn').style.display = '';
+        this.showStatus('AI vs AI started');
+      }
+
+      stopAIVsAI() {
+        this._aiVsAiStopped = true;
+        this._aiVsAiStartRequested = false;
+        this.setAIThinking(false);
+        this._updateAIVsAIButtons();
+        this.showStatus('AI vs AI stopped');
+      }
+
+      requestAIMove() {
+        if (!this.aiBridge.connected || this.game.gameOver) return;
+        if (this._aiVsAiStopped) return;
+        const aiGtpColor = this.game.currentPlayer === BLACK ? 'B' : 'W';
+        this.setAIThinking(true);
+        this.aiBridge.sendGenMove(aiGtpColor);
+      }
+
+      setAIThinking(thinking) {
+        this.aiThinking = thinking;
+        const el = document.getElementById('ai-thinking');
+        if (el) {
+          el.classList.toggle('hidden', !thinking);
+          if (thinking && this.game) {
+            const color = this.game.currentPlayer === BLACK ? 'Black' : 'White';
+            document.getElementById('ai-thinking-label').textContent = `${color} thinking…`;
+          }
+        }
+        this.updateUI();
+      }
+
+      saveSGF() {
+        const metadata = {};
+        const _engineLabel = (key) => {
+          return this.aiBridge.engines[key] || key;
+        };
+        if (this.gameMode === 'hvai-b') {
+          const eid = document.getElementById('hvai-engine-select').value;
+          metadata.blackPlayer = 'Human';
+          metadata.whitePlayer = _engineLabel(eid);
+        } else if (this.gameMode === 'hvai-w') {
+          const eid = document.getElementById('hvai-engine-select').value;
+          metadata.blackPlayer = _engineLabel(eid);
+          metadata.whitePlayer = 'Human';
+        } else if (this.gameMode === 'aivai') {
+          const beid = document.getElementById('engine-black-select').value;
+          const weid = document.getElementById('engine-white-select').value;
+          metadata.blackPlayer = _engineLabel(beid);
+          metadata.whitePlayer = _engineLabel(weid);
+        } else {
+          metadata.blackPlayer = 'Black';
+          metadata.whitePlayer = 'White';
+        }
+
+        const sgf = generateSGF(this.game, metadata);
+        const now = new Date();
+        const ts = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const filename = `go-${this.game.size}x${this.game.size}-${ts}.sgf`;
+        downloadSGF(sgf, filename);
+        this.showStatus('SGF saved');
+      }
+
+      // ── SGF Loading ──
+      loadSGF(sgfContent) {
+        const parsed = parseSGF(sgfContent);
+        if (!parsed) {
+          this.showStatus('Invalid SGF file');
+          return;
+        }
+
+        // Store the full SGF moves for analysis navigation
+        this._sgfMoves = parsed.moves;
+        this._sgfSize = parsed.size;
+        this._sgfKomi = parsed.komi;
+        this._analysisResults = {};
+
+        // Reset game with parsed size
+        this.game = new GoGame(parsed.size);
+        if (parsed.komi !== undefined) this.game.komi = parsed.komi;
+        this.renderer.setGame(this.game);
+
+        // Update size buttons
+        document.querySelectorAll('.size-btn').forEach(btn => {
+          btn.classList.toggle('active', parseInt(btn.dataset.size) === parsed.size);
+        });
+
+        // Replay all moves
+        for (const move of parsed.moves) {
+          if (move.type === 'pass') {
+            this.game.pass();
+          } else {
+            const result = this.game.playMove(move.row, move.col);
+            if (!result.valid) break;
+          }
+        }
+
+        // Setup and show analysis panel
+        this._setupAnalysisPanel();
+
+        this.render();
+        this.updateUI();
+        this.hideScore();
+        if (this.game.gameOver) this.showScore();
+        this.showStatus(`Loaded SGF: ${parsed.moves.length} moves`);
+      }
+
+      // ── Analysis Methods ──
+
+      _setupAnalysisPanel() {
+        const panel = document.getElementById('analysis-panel');
+        const slider = document.getElementById('analysis-slider');
+        const total = this._sgfMoves ? this._sgfMoves.length : 0;
+        slider.max = total;
+        slider.value = total;
+        this._analysisViewMove = total;
+        document.getElementById('analysis-move-num').textContent = `Move ${total} / ${total}`;
+        // Connect to server so engine info is available for the selector
+        if (this.aiBridge && !this.aiBridge.connected) {
+          this.aiBridge.connect();
+        }
+        // Populate engine selector with version info if already known
+        if (this.aiBridge && Object.keys(this.aiBridge.engines).length > 0) {
+          this._updateEngineSelectors(this.aiBridge.engines);
+        }
+        // Show the full analysis panel immediately after SGF load
+        panel.classList.add('visible');
+      }
+
+      toggleAnalysis() {
+        // If auto-analyzing, stop it
+        if (this._autoAnalyzing) {
+          this._autoAnalyzing = false;
+          this.showStatus('Analysis stopped');
+          return;
+        }
+
+        if (!this._sgfMoves) {
+          this.showStatus('Load an SGF first');
+          return;
+        }
+
+        if (!this.aiBridge.connected) {
+          this.aiBridge.connect();
+          this.showStatus('Connecting to AI server...');
+          return;
+        }
+
+        // Start auto-analyze from the current position, then continue
+        // with remaining moves in the background
+        this.autoAnalyzeAll();
+      }
+
+      analysisGoTo(moveNum) {
+        if (!this._sgfMoves) return;
+        moveNum = Math.max(0, Math.min(moveNum, this._sgfMoves.length));
+        this._analysisViewMove = moveNum;
+
+        // Rebuild game state up to this move
+        this.game = new GoGame(this._sgfSize);
+        this.game.komi = this._sgfKomi;
+        this.renderer.setGame(this.game);
+
+        for (let i = 0; i < moveNum; i++) {
+          const move = this._sgfMoves[i];
+          if (move.type === 'pass') {
+            this.game.pass();
+          } else {
+            const result = this.game.playMove(move.row, move.col);
+            if (!result.valid) break;
+          }
+        }
+
+        // Update slider and label
+        const slider = document.getElementById('analysis-slider');
+        slider.value = moveNum;
+        document.getElementById('analysis-move-num').textContent =
+          `Move ${moveNum} / ${this._sgfMoves.length}`;
+
+        // Show cached analysis if available, otherwise request it
+        if (this._analysisResults[moveNum]) {
+          this._showAnalysis(this._analysisResults[moveNum]);
+        } else {
+          document.getElementById('analysis-results').innerHTML = '';
+          document.getElementById('analysis-winrate').style.display = 'none';
+          document.getElementById('analysis-pv').style.display = 'none';
+          document.getElementById('analysis-score-diff').innerHTML = '';
+          this._analysisOverlay = null;
+          this._analysisOwnership = null;
+          this._selectedPVIndex = null;
+          this._hoveredCandidateIndex = null;
+          this._stopPVAnimation();
+        }
+
+        this.render();
+        this.updateUI();
+      }
+
+      runAnalysis() {
+        if (!this.aiBridge.connected) {
+          this.showStatus('Connect to AI server first');
+          return;
+        }
+        if (!this._sgfMoves) {
+          this.showStatus('Load an SGF first');
+          return;
+        }
+
+        const moveNum = this._analysisViewMove;
+        const color = this.game.currentPlayer === BLACK ? 'B' : 'W';
+
+        // Build the move list to send for analysis
+        const movesToSend = [];
+        let currentColor = 'B'; // Assuming black goes first
+        for (let i = 0; i < moveNum; i++) {
+          const m = this._sgfMoves[i];
+          const mc = m.color || currentColor;
+          if (m.type === 'pass') {
+            movesToSend.push({ color: mc, pass: true });
+          } else {
+            movesToSend.push({ color: mc, row: m.row, col: m.col });
+          }
+          currentColor = mc === 'B' ? 'W' : 'B';
+        }
+
+        const useEngine = document.getElementById('analysis-engine-select').value;
+        this.showStatus('Analyzing position...', true);
+        this.aiBridge.sendAnalyze(movesToSend, color, this._sgfSize, this._sgfKomi, 200, useEngine);
+      }
+
+      _showAnalysis(data) {
+        const moves = data.moves || [];
+        if (moves.length === 0) {
+          document.getElementById('analysis-results').innerHTML = '<p style="color:#999;">No analysis available.</p>';
+          document.getElementById('analysis-pv').style.display = 'none';
+          document.getElementById('analysis-score-diff').innerHTML = '';
+          return;
+        }
+
+        // Show win rate bar
+        const topMove = moves[0];
+        if (topMove.winrate !== undefined) {
+          const blackWin = Math.round(topMove.winrate * 100);
+          const whiteWin = 100 - blackWin;
+          document.getElementById('winrate-black').textContent = `B: ${blackWin}%`;
+          document.getElementById('winrate-white').textContent = `W: ${whiteWin}%`;
+          document.getElementById('winrate-fill').style.width = `${blackWin}%`;
+          document.getElementById('analysis-winrate').style.display = 'flex';
+        }
+
+        // Score difference from previous move
+        const moveNum = data.moveNumber || 0;
+        this._showScoreDiff(moveNum, topMove);
+
+        // Build results table with PV sequences
+        const bestScoreLead = topMove.scoreLead;
+        let html = '<table><tr><th>#</th><th>Move</th><th>Win%</th><th>Score</th><th>Diff</th><th>Visits</th><th>Sequence</th></tr>';
+        for (let i = 0; i < Math.min(moves.length, 10); i++) {
+          const m = moves[i];
+          const isTop = i === 0;
+          const winPct = m.winrate !== undefined ? `${(m.winrate * 100).toFixed(1)}%` : '-';
+          const score = m.scoreLead !== undefined ? (m.scoreLead > 0 ? `B+${m.scoreLead.toFixed(1)}` : `W+${(-m.scoreLead).toFixed(1)}`) : '-';
+          let diffStr = '-';
+          if (m.scoreLead !== undefined && bestScoreLead !== undefined) {
+            const diff = m.scoreLead - bestScoreLead;
+            if (i === 0) {
+              diffStr = '<span style="color:#4caf50;">best</span>';
+            } else {
+              const color = diff > -1 ? '#ffeb3b' : '#f44336';
+              diffStr = `<span style="color:${color};">${diff.toFixed(1)}</span>`;
+            }
+          }
+          const visits = m.visits || '-';
+          // Short PV summary (first 5 moves as GTP coords)
+          const pvShort = m.pvText ? m.pvText.split(' ').slice(0, 5).join(' ') : '-';
+          html += `<tr class="${isTop ? 'top-move' : ''}" data-move-idx="${i}" style="cursor:pointer;">`;
+          html += `<td>${i}</td>`;
+          html += `<td><strong>${m.move || 'pass'}</strong></td>`;
+          html += `<td>${winPct}</td>`;
+          html += `<td>${score}</td>`;
+          html += `<td>${diffStr}</td>`;
+          html += `<td>${visits}</td>`;
+          html += `<td style="font-family:monospace;font-size:11px;color:#aaa;">${this._escHtml(pvShort)}</td>`;
+          html += `</tr>`;
+        }
+        html += '</table>';
+        document.getElementById('analysis-results').innerHTML = html;
+
+        // Click handlers for rows — show full PV
+        document.querySelectorAll('#analysis-results tr[data-move-idx]').forEach(tr => {
+          tr.addEventListener('click', () => {
+            const idx = parseInt(tr.dataset.moveIdx);
+            this._showMovePV(moves[idx], idx);
+            // Highlight selected row
+            document.querySelectorAll('#analysis-results tr').forEach(r => r.classList.remove('selected-move'));
+            tr.classList.add('selected-move');
+            // Update overlay — table click shows PV on board with animation
+            this._analysisOverlay = moves;
+            this._selectedPVIndex = idx;
+            this._startPVAnimation(idx);
+            this.render();
+            // Clear selection after animation completes so it returns to winrates
+            const pvLen = moves[idx] && moves[idx].pv ? moves[idx].pv.length : 0;
+            const animDuration = pvLen * 150 + 2000; // animation + 2s hold
+            setTimeout(() => {
+              if (this._selectedPVIndex === idx && this._hoveredCandidateIndex === null) {
+                this._selectedPVIndex = null;
+                this._stopPVAnimation();
+                this.render();
+              }
+            }, animDuration);
+          });
+        });
+
+        // Show top move PV by default
+        this._showMovePV(topMove, 0);
+
+        // Store for overlay rendering — no PV selected by default (just winrate circles)
+        this._analysisOverlay = moves;
+        this._analysisOwnership = data.ownership || null;
+        this._selectedPVIndex = null;
+        this._hoveredCandidateIndex = null;
+        this._stopPVAnimation();
+        this.render();
+      }
+
+      _showMovePV(move, index) {
+        const pvEl = document.getElementById('analysis-pv');
+        const seqEl = document.getElementById('pv-sequence');
+        if (!move || !move.pvText) {
+          pvEl.style.display = 'none';
+          return;
+        }
+
+        pvEl.style.display = 'block';
+        const pvTokens = move.pvText.split(' ');
+        // Build numbered sequence: 1.D4 2.Q16 3.C3...
+        let seqParts = [];
+        for (let i = 0; i < pvTokens.length; i++) {
+          seqParts.push(`${i + 1}.${pvTokens[i]}`);
+        }
+
+        const winInfo = move.winrate !== undefined ? `Win: ${(move.winrate * 100).toFixed(1)}%` : '';
+        const scoreInfo = move.scoreLead !== undefined
+          ? `Score: ${move.scoreLead > 0 ? 'B+' : 'W+'}${Math.abs(move.scoreLead).toFixed(1)}`
+          : '';
+
+        pvEl.querySelector('.pv-title').textContent =
+          `Move ${index + 1}: ${move.move || 'pass'} — ${winInfo} ${scoreInfo}`;
+        seqEl.textContent = seqParts.join('  ');
+      }
+
+      _showScoreDiff(moveNum, topMove) {
+        const el = document.getElementById('analysis-score-diff');
+        // Compare with previous move's analysis
+        const prevData = this._analysisResults[moveNum - 1];
+        if (!prevData || !prevData.moves || prevData.moves.length === 0 || !topMove) {
+          el.innerHTML = '';
+          return;
+        }
+
+        const prevScore = prevData.moves[0].scoreLead;
+        const curScore = topMove.scoreLead;
+        if (prevScore === undefined || curScore === undefined) {
+          el.innerHTML = '';
+          return;
+        }
+
+        const diff = curScore - prevScore;
+        const absDiff = Math.abs(diff);
+        let color, label;
+        if (absDiff < 0.5) {
+          color = '#4caf50'; label = 'Even';
+        } else if (diff > 0) {
+          color = '#4caf50'; label = `B gained +${absDiff.toFixed(1)}`;
+        } else {
+          color = '#f44336'; label = `W gained +${absDiff.toFixed(1)}`;
+        }
+
+        // Check if the played move was the best move
+        const playedMove = this._sgfMoves && moveNum > 0 ? this._sgfMoves[moveNum - 1] : null;
+        let moveQuality = '';
+        if (playedMove && prevData.moves.length > 0) {
+          const bestMove = prevData.moves[0].move;
+          let playedGtp = '';
+          if (playedMove.type === 'pass') {
+            playedGtp = 'pass';
+          } else {
+            const GTP_COLS = 'ABCDEFGHJKLMNOPQRST';
+            playedGtp = GTP_COLS[playedMove.col] + String(this._sgfSize - playedMove.row);
+          }
+          if (playedGtp.toUpperCase() === (bestMove || '').toUpperCase()) {
+            moveQuality = ' <span style="color:#4caf50;">✓ Best move</span>';
+          } else {
+            // Find the played move in the candidate list
+            const found = prevData.moves.find(m =>
+              (m.move || '').toUpperCase() === playedGtp.toUpperCase()
+            );
+            if (found) {
+              const lostScore = prevData.moves[0].scoreLead - found.scoreLead;
+              if (Math.abs(lostScore) > 2) {
+                moveQuality = ` <span style="color:#f44336;">✗ Mistake (lost ${Math.abs(lostScore).toFixed(1)} pts)</span>`;
+              } else if (Math.abs(lostScore) > 0.5) {
+                moveQuality = ` <span style="color:#ff9800;">△ Inaccuracy (lost ${Math.abs(lostScore).toFixed(1)} pts)</span>`;
+              } else {
+                moveQuality = ' <span style="color:#4caf50;">≈ Good move</span>';
+              }
+            }
+          }
+        }
+
+        el.innerHTML = `Score trend: <span style="color:${color};">${label}</span>${moveQuality}`;
+      }
+
+      autoAnalyzeAll() {
+        if (!this.aiBridge.connected) {
+          this.showStatus('Connect to AI server first');
+          return;
+        }
+        if (!this._sgfMoves || this._sgfMoves.length === 0) {
+          this.showStatus('Load an SGF first');
+          return;
+        }
+        if (this._autoAnalyzing) return; // Already running
+
+        this._autoAnalyzing = true;
+        // Start from the currently viewed position, then wrap around
+        this._autoAnalyzeIndex = this._analysisViewMove;
+        this._autoAnalyzeWrapped = false;
+        this.showStatus('Analyzing all positions...', true);
+        // Analyze the current position first so results show immediately
+        if (!this._analysisResults[this._analysisViewMove]) {
+          this._sendAnalysisForMove(this._analysisViewMove);
+        } else {
+          // Already cached — show it and move to next un-cached position
+          this._showAnalysis(this._analysisResults[this._analysisViewMove]);
+          this._autoAnalyzeNext();
+        }
+      }
+
+      _autoAnalyzeNext() {
+        if (!this._autoAnalyzing) return;
+        const total = this._sgfMoves.length;
+
+        // Find next un-analyzed position
+        // We scan forward from _autoAnalyzeIndex, wrapping around to 0
+        // once we pass the end, to cover all positions.
+        const limit = total + 1; // positions 0..total inclusive
+        let checked = 0;
+        while (checked < limit) {
+          // Wrap around
+          if (this._autoAnalyzeIndex > total) {
+            if (this._autoAnalyzeWrapped) break; // already wrapped, done
+            this._autoAnalyzeWrapped = true;
+            this._autoAnalyzeIndex = 0;
+          }
+          if (!this._analysisResults[this._autoAnalyzeIndex]) {
+            break; // found one to analyze
+          }
+          this._autoAnalyzeIndex++;
+          checked++;
+        }
+
+        // Check if all positions have been analyzed
+        if (checked >= limit || (this._autoAnalyzeWrapped && this._autoAnalyzeIndex > total)) {
+          this._autoAnalyzing = false;
+          this.showStatus('Analysis complete!');
+          this.analysisGoTo(this._analysisViewMove);
+          return;
+        }
+
+        // Count how many are done for progress display
+        let done = 0;
+        for (let i = 0; i <= total; i++) {
+          if (this._analysisResults[i]) done++;
+        }
+
+        const moveNum = this._autoAnalyzeIndex;
+        this.showStatus(`Analyzing move ${moveNum} (${done}/${total + 1} done)...`, true);
+        this._sendAnalysisForMove(moveNum);
+      }
+
+      deeperAnalysis() {
+        if (this._analysisViewMove === undefined || this._analysisViewMove === null) return;
+        if (!this._sgfMoves) return;
+        // Clear cached result so deeper one replaces it
+        if (this._analysisResults) delete this._analysisResults[this._analysisViewMove];
+        this.showStatus('Running deeper analysis...', true);
+        this._sendAnalysisForMove(this._analysisViewMove, 15);  // 15 seconds
+      }
+
+      _sendAnalysisForMove(moveNum, duration) {
+        // Build the move list to send for analysis at a specific move number
+        // without changing the currently viewed position
+        const movesToSend = [];
+        let currentColor = 'B';
+        for (let i = 0; i < moveNum; i++) {
+          const m = this._sgfMoves[i];
+          const mc = m.color || currentColor;
+          if (m.type === 'pass') {
+            movesToSend.push({ color: mc, pass: true });
+          } else {
+            movesToSend.push({ color: mc, row: m.row, col: m.col });
+          }
+          currentColor = mc === 'B' ? 'W' : 'B';
+        }
+        // Determine whose turn it is at this position
+        const color = currentColor;
+        const useEngine = document.getElementById('analysis-engine-select').value;
+        this.aiBridge.sendAnalyze(movesToSend, color, this._sgfSize, this._sgfKomi, 200, useEngine, duration);
+      }
+    }
+
+    // ==================== Init ====================
+    new GoController();
+  })();
+  </script>
+</body>
+</html>

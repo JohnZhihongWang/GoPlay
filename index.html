@@ -2635,6 +2635,11 @@
           return;
         }
 
+        // Switch to Human vs Human mode (stops AI vs AI, disconnects AI, updates UI)
+        if (this.gameMode !== 'hvh') {
+          this.setGameMode('hvh');
+        }
+
         // Store the full SGF moves for analysis navigation
         this._sgfMoves = parsed.moves;
         this._sgfSize = parsed.size;

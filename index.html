@@ -1438,14 +1438,36 @@
         this._reconnectTimer = null;
         this._reconnectDelay = 1000;
         this._maxReconnectDelay = 10000;
-        this._url = 'ws://localhost:9001';
+        this._url = null;  // resolved from config.json on first connect
+        this._configLoaded = false;
         this._intentionalClose = false;
       }
 
-      connect() {
+      async _loadConfig() {
+        if (this._configLoaded) return;
+        try {
+          const resp = await fetch('config.json');
+          if (resp.ok) {
+            const cfg = await resp.json();
+            const host = cfg.server?.host || 'localhost';
+            const port = cfg.server?.port || 9001;
+            this._url = `ws://${host}:${port}`;
+          }
+        } catch (e) {
+          // config.json not available — fall back to default
+        }
+        if (!this._url) {
+          this._url = 'ws://localhost:9001';
+        }
+        this._configLoaded = true;
+      }
+
+      async connect() {
         if (this.ws && this.ws.readyState <= WebSocket.OPEN) return;
         this._intentionalClose = false;
         this._setStatus('connecting');
+
+        await this._loadConfig();
 
         try {
           this.ws = new WebSocket(this._url);
